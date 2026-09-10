@@ -5,6 +5,10 @@
   --muted: #555;
   --line: #ddd;
   --accent: #06c;
+  --wrong: #c0392b;
+  --wrong-bg: #fdecea;
+  --correct: #1e7e34;
+  --correct-bg: #e6f4ea;
 }
 @media (prefers-color-scheme: dark) {
   :root {
@@ -13,6 +17,10 @@
     --muted: #a0a0a0;
     --line: #333;
     --accent: #6ab0ff;
+    --wrong: #ff8a80;
+    --wrong-bg: #3a1d1a;
+    --correct: #7ddc9a;
+    --correct-bg: #16301f;
   }
 }
 
@@ -60,18 +68,13 @@ a { color: var(--accent); }
   border: 1px solid var(--fg);
   border-radius: 4px;
   color: var(--fg);
-  text-decoration: none;
-  font-size: 1.1rem;
-}
-.cta:hover { background: var(--fg); color: var(--bg); }
-.cta[disabled] {
-  border-color: var(--line);
-  color: var(--muted);
   background: none;
-  cursor: default;
+  text-decoration: none;
   font: inherit;
   font-size: 1.1rem;
+  cursor: pointer;
 }
+.cta:hover { background: var(--fg); color: var(--bg); }
 
 /* Learn list */
 .back {
@@ -133,4 +136,109 @@ ul.patterns a:hover { color: var(--accent); }
 .diagram-error {
   color: var(--muted);
   font-size: 0.9rem;
+}
+
+/* Test */
+#app.wide {
+  max-width: 64rem;
+}
+.test-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 2rem;
+}
+.test-bar select {
+  font: inherit;
+  color: var(--fg);
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 0.4rem 0.5rem;
+}
+.test-bar .count {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+.test-bar .reset {
+  font-size: 0.9rem;
+  margin-left: auto;
+}
+.test-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2.5rem;
+  align-items: start;
+}
+@media (max-width: 40rem) {
+  .test-grid {
+    grid-template-columns: 1fr;
+    gap: 1.5rem;
+  }
+}
+.scenario p {
+  margin: 0 0 1rem;
+}
+.picks .category:first-child {
+  margin-top: 0;
+}
+.choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+.choice {
+  font: inherit;
+  font-size: 0.9rem;
+  color: var(--fg);
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 0.35rem 0.7rem;
+  cursor: pointer;
+}
+.choice:hover:enabled {
+  border-color: var(--accent);
+}
+.choice[disabled] {
+  cursor: default;
+}
+.choice.wrong {
+  color: var(--wrong);
+  background: var(--wrong-bg);
+  border-color: var(--wrong);
+}
+.choice.correct {
+  color: var(--correct);
+  background: var(--correct-bg);
+  border-color: var(--correct);
+  font-weight: 600;
+}
+.success {
+  border-top: 1px solid var(--line);
+  padding-top: 1rem;
+}
+.success p {
+  color: var(--correct);
+  font-weight: 600;
+  margin: 0 0 1rem;
+}
+.all-done {
+  text-align: center;
+  padding: 3rem 0;
+}
+.all-done .party {
+  font-size: 4rem;
+  line-height: 1;
+}
+.all-done h1 {
+  font-size: 2rem;
+  margin: 1rem 0 0.5rem;
+}
+.all-done p {
+  color: var(--muted);
+  max-width: 32rem;
+  margin: 0 auto;
 }
