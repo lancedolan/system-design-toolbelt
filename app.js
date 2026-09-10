@@ -55,10 +55,10 @@ function detailView(pattern) {
     <div class="detail">
       <h1>${esc(pattern.name)}</h1>
       <h3>When to use</h3>
-      <p class="trigger">${esc(pattern.trigger)}</p>
-      <div class="diagram" id="diagram"></div>
+      <p>${esc(pattern.trigger)}</p>
       <h3>How to implement</h3>
       <p>${esc(pattern.implementation)}</p>
+      <div class="diagram" id="diagram"></div>
     </div>`;
 }
 

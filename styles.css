@@ -114,10 +114,6 @@ ul.patterns a:hover { color: var(--accent); }
   font-size: 1.6rem;
   margin: 0 0 0.5rem;
 }
-.detail .trigger {
-  color: var(--muted);
-  margin: 0 0 2rem;
-}
 .detail h3:first-of-type {
   margin-top: 1.5rem;
 }
