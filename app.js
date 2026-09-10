@@ -150,6 +150,7 @@ function quizBar() {
     <div class="quiz-bar">
       <select id="category">${options}</select>
       <span class="count">${done} of ${inFilter.length} solved</span>
+      <span class="meter" role="progressbar" aria-valuenow="${done}" aria-valuemin="0" aria-valuemax="${inFilter.length}" aria-label="scenarios solved"><span class="meter-fill" style="width: ${inFilter.length ? (done / inFilter.length) * 100 : 0}%"></span></span>
       <a class="reset" href="#/quiz" data-reset>reset progress</a>
     </div>`;
 }

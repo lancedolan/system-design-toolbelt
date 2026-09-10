@@ -161,6 +161,21 @@ ul.patterns a:hover { color: var(--accent); }
   color: var(--muted);
   font-size: 0.9rem;
 }
+.quiz-bar .meter {
+  width: 8rem;
+  height: 0.5rem;
+  border-radius: 999px;
+  background: var(--line);
+  overflow: hidden;
+  margin-left: -0.5rem;
+}
+.quiz-bar .meter-fill {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  border-radius: 999px;
+  transition: width 0.2s;
+}
 .quiz-bar .reset {
   font-size: 0.9rem;
   margin-left: auto;
