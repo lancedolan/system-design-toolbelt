@@ -1,0 +1,286 @@
+// Every pattern shown by the app. Diagram sources live in diagrams.js, keyed by id.
+const PATTERN_CATEGORIES = [
+  {
+    category: "Request handling / API",
+    patterns: [
+      {
+        id: "asynchronous-request-reply",
+        name: "Asynchronous Request-Reply",
+        trigger: "Work takes longer than a caller is willing to hold a connection open for.",
+        implementation: `The client sends a normal HTTP request to start a job. Your API checks the request, saves a new job record with a random ID, puts a work message on a queue, and immediately replies with HTTP 202 (Accepted) plus a Location header holding the URL of a status endpoint and a Retry-After header saying how many seconds to wait between checks. A separate worker reads the queue, does the slow work, and updates the job record with a state like Running, Succeeded, or Failed, along with the result. The client keeps calling GET on the status endpoint, which returns HTTP 200 with the current state while work is pending, and returns HTTP 303 (See Other) pointing at the finished result once the job is done.`,
+      },
+      {
+        id: "queue-based-load-leveling",
+        name: "Queue-Based Load Leveling",
+        trigger: "Service is hit by intermittent heavy loads that may overwhelm it.",
+        implementation: `Put a durable queue between the code that makes requests and the service that does the work. The sender writes a message with everything the work needs, then moves on without waiting. A worker pulls messages off the queue one batch at a time and calls the slow service at a steady rate you choose, so a burst of senders never hits the service all at once. Set a limit on how many workers run, make the worker safe to run twice on the same message, and watch how many messages are waiting so you can add workers before the backlog grows.`,
+      },
+      {
+        id: "competing-consumers",
+        name: "Competing Consumers",
+        trigger: "A single worker can't keep up with the backlog and processing needs to scale horizontally.",
+        implementation: `Point many copies of the same worker at one queue. Each worker takes a message, and the queue hands each message to only one worker at a time by locking it while that worker runs. When the worker finishes, it tells the queue the message is done and the queue deletes it. If the worker crashes or the lock runs out, the message becomes visible again and another worker picks it up, so write the worker so that handling the same message twice causes no harm.`,
+      },
+      {
+        id: "priority-queue",
+        name: "Priority Queue",
+        trigger: "Some requests must be serviced ahead of others rather than strictly in arrival order.",
+        implementation: `Have the sender attach a priority label, such as High or Low, to every message. One way is a single queue that orders messages by that label so workers always take the high ones first. The other way is a separate queue per priority, with the sender routing each message by its label, and a separate group of workers on each queue where the high-priority group is allowed to grow to many more copies than the low-priority group. Low-priority messages can wait forever if high-priority work never stops, so either raise the priority of messages that have waited too long or reserve some workers for the low queue.`,
+      },
+      {
+        id: "claim-check",
+        name: "Claim-Check",
+        trigger: "Messages carry payloads too large for the message bus to handle efficiently.",
+        implementation: `The sender writes the big data to a storage system first, like a file store or database, and gets back a short unique id for it. The sender then puts only that id into the queue message, so the queue carries a few bytes instead of megabytes. The worker reads the message, takes the id, fetches the data from storage, and processes it. After processing, delete both the message and the stored data, either right away in the worker or with a separate cleanup job, and skip this whole flow for messages small enough to send directly.`,
+      },
+      {
+        id: "dead-letter-queue",
+        name: "Dead-Letter Queue",
+        trigger: "Poison messages keep failing and would otherwise block or endlessly recycle through the queue.",
+        implementation: `Create a second queue and attach it to your main queue as the place for failed messages. On the main queue, set a max receive count, which is how many times a worker may pick up a message and fail to delete it before the system gives up. When a message hits that count, the queue moves it to the second queue instead of handing it to workers again. Set the second queue to keep messages longer than the main queue, and add an alarm on its message count so someone looks at the failures.`,
+      },
+      {
+        id: "idempotency-key",
+        name: "Idempotency Key",
+        trigger: "Clients retry writes and a duplicate would cause real damage, like double-charging.",
+        implementation: `The client makes up a random unique string, such as a UUID, and sends it with a write request in a header named Idempotency-Key. The server stores a row keyed by that string holding the response status code and body from the first attempt. If the same key arrives again, the server skips the work and returns the saved response, so a retry after a dropped connection does not charge a card twice. Compare the new request body to the saved one and return an error if they differ, and delete stored keys after about 24 hours.`,
+      },
+      {
+        id: "valet-key",
+        name: "Valet Key",
+        trigger: "Bulk data transfer would otherwise flow through your application servers as a bottleneck.",
+        implementation: `The client asks your server for permission to read or write one specific file. Your server checks who the client is, then signs a short token that names the exact file, the allowed action such as write only, and an expiry time a few minutes out. The server returns that token plus the storage address, and the client sends its bytes straight to storage over HTTPS. Your server never touches the file data, so keep the token narrow, log both the token requests and the storage operations, and check any uploaded file before using it.`,
+      },
+      {
+        id: "api-gateway",
+        name: "API Gateway",
+        trigger: "Clients would otherwise need to know about and call many individual services directly.",
+        implementation: `You run one service that every client calls first. It holds a routing table that maps an incoming path like /orders/123 to the internal service that owns orders, and it asks a service registry for that service's current network address before forwarding the call. For some paths it calls several services and joins their answers into one response. Put shared checks here too, such as reading the access token on each request and rejecting calls with a missing or invalid token, and use non-blocking network calls so one slow service does not tie up threads.`,
+      },
+      {
+        id: "backends-for-frontends",
+        name: "Backends for Frontends",
+        trigger: "A shared API is being pulled in conflicting directions by mobile, web, and partner clients.",
+        implementation: `Instead of one shared backend service for every client, you build and deploy a separate small service for each client type, for example one for the mobile app and one for the desktop web app. Each of those services exposes endpoints shaped for its own client, so the mobile one might return a single page of results with fewer fields while the desktop one calls several services and returns many pages in one response. The team that owns a client owns its service too, so they pick the language and ship on their own schedule. Keep shared work like token checking, request logging, and rate limits in a gateway that sits in front of these services.`,
+      },
+      {
+        id: "gateway-aggregation",
+        name: "Gateway Aggregation",
+        trigger: "A single client action requires many backend round trips over a slow network.",
+        implementation: `The client sends one request to a gateway endpoint, for example GET /order-summary/123. The gateway then calls the order service, the shipment service, and the customer profile service at the same time using non-blocking calls, waits for their responses, and merges the fields into one JSON body it returns to the client. Give each backend call its own timeout and decide up front what happens when one fails, either return a partial body with the missing part left out or fail the whole request with an error status. Deploy the gateway close to the backend services, and pass a correlation ID to each call so you can trace which backend was slow.`,
+      },
+    ],
+  },
+  {
+    category: "Data",
+    patterns: [
+      {
+        id: "cache-aside",
+        name: "Cache-Aside",
+        trigger: "Reads repeatedly hit the same expensive data and read volume dominates writes.",
+        implementation: `On a read, your code builds a key from the item's identity, for example "user:42", and asks the cache for that key. If the cache returns nothing, that is a miss, so the code reads the row from the database, writes it into the cache under that key with an expiration time, and returns it to the caller. On a write, update the database row first, then delete the key from the cache, in that order, because deleting first lets another reader reload the old row and put it back. Choose the expiration time from how often the data changes, and expect a short window after a write where a reader gets a miss or a slightly old value.`,
+      },
+      {
+        id: "sharding",
+        name: "Sharding",
+        trigger: "Data volume or write throughput exceeds what one database instance can hold or serve.",
+        implementation: `Split one big table across several separate databases, called shards, each holding a different slice of the rows. Pick one field as the shard key, like tenant ID or a book's ISBN, and write routing code that turns that key into a database address. The routing can be a lookup table that maps each key to a server, a range rule that sends January orders to one shard and February to another, or a hash function that scrambles the key so rows spread evenly. Map many small logical shards onto fewer machines so you can move a logical shard to a new machine later without recomputing every key.`,
+      },
+      {
+        id: "materialized-view",
+        name: "Materialized View",
+        trigger: "Query-time joins or aggregations are too slow against the normalized source schema.",
+        implementation: `Run the slow query once, then save its answer as real rows in a table that reads fast. Your app reads only that table and never writes to it, so the table can always be thrown away and rebuilt from the original data. Refresh it on a timer, or refresh it when a change event arrives saying the original rows changed. Store extra computed columns, like a total or a count, so the reader gets the final number without doing math.`,
+      },
+      {
+        id: "index-table",
+        name: "Index Table",
+        trigger: "Queries need to filter on a field that isn't the shard or partition key.",
+        implementation: `Build a second table whose key is the field you want to search by, like town or actor name, when your database has no built in secondary index. Each row in that table either copies the full record, stores just the primary key so you do a second read to get the record, or copies the few fields most queries need and keeps the primary key for the rest. Use a joined key like town plus last name when queries always ask for both together. Every insert, update, and delete must change the index table too, often through a queued message handled by a background worker, so the index lags the real data for a short time.`,
+      },
+      {
+        id: "cqrs",
+        name: "CQRS",
+        trigger: "Read and write workloads have such different shapes and scale that one model serves neither well.",
+        implementation: `Write two separate models in code: one that handles changes and one that handles reads. The change model takes commands, checks the rules, and saves the result. The read model holds tables shaped exactly like the screens that display them, so a read is one simple select with no joins. The two can share one database, or the read side can have its own database that gets updated by events the write side publishes, which means reads can be a few seconds behind.`,
+      },
+      {
+        id: "event-sourcing",
+        name: "Event Sourcing",
+        trigger: "You need full history, audit, or replay rather than just the current state.",
+        implementation: `Instead of saving only the current state of a record, you save every change as its own entry in an append-only log, a table you can add rows to but never edit. Each entry says what happened, like "item added to cart" with the time and details. To get the current state, your code starts from empty and applies every entry in order, and you can stop partway to see the state at any past moment. Replaying from the beginning gets slow, so you save a snapshot of the state at a known point and replay only the entries after it.`,
+      },
+      {
+        id: "database-per-service",
+        name: "Database per Service",
+        trigger: "Services are coupled through a shared schema and can't deploy or scale independently.",
+        implementation: `Each service gets its own database, and no other service is allowed to read or write it. The other services must ask for the data through the owning service's API instead of running their own queries against those tables. You enforce this by giving each service its own database login and granting that login access only to its own tables or schema. Reports that need data from several services get built by calling each service's API and joining the results in code, or by keeping a separate read-only copy fed by the services.`,
+      },
+      {
+        id: "change-data-capture",
+        name: "Change Data Capture",
+        trigger: "Downstream systems need to react to database changes without the source app publishing events.",
+        implementation: `You watch a database for every insert, update, and delete, then send those changes to other systems as they happen. The common method reads the database's transaction log, the file the database already writes for crash recovery, so the source database does no extra work. Two simpler methods exist: a database trigger writes each change into a second table, or a job repeatedly queries rows where a last_modified timestamp is newer than the last check, though the timestamp method misses deleted rows. The captured changes go onto a message queue so a target system that is down can catch up later.`,
+      },
+      {
+        id: "transactional-outbox",
+        name: "Transactional Outbox",
+        trigger: "A write and its event publish must both happen or neither, across two systems.",
+        implementation: `You want to save data and send a message, and you need both to happen or neither. In one database transaction, your code writes the business row and also inserts a row into an outbox table holding the message body and destination. Because it is one transaction, the message row exists only if the save succeeded. A separate worker then reads unsent outbox rows, publishes each to the message broker, and marks it sent, and because that worker can crash after publishing but before marking, receivers must handle the same message arriving twice.`,
+      },
+      {
+        id: "saga",
+        name: "Saga",
+        trigger: "A business transaction spans multiple services and distributed ACID isn't available.",
+        implementation: `Break one big job into a list of smaller steps, where each service changes only its own database. After a service finishes its step, it saves a message in its own database in the same write, then a background sender picks up that message and sends it, so the change and the message can never disagree. The next service listens for that message and does its step, or a single coordinator service sends each step as a command and waits for the reply. If a step fails, run undo steps for the steps that already finished, because there is no shared database rollback across services.`,
+      },
+      {
+        id: "compensating-transaction",
+        name: "Compensating Transaction",
+        trigger: "A multi-step operation fails partway and already-completed steps must be undone.",
+        implementation: `For every forward step you run, write a row that says which step ran, its inputs, and what command would undo it. When a later step fails and retrying it does not help, read those rows back and send the undo command for each finished step. Write undo steps so that running the same one twice has the same result as running it once, because the undo itself can fail and be retried. Save progress as each undo finishes so a crash can pick up where it stopped, and send an alert when an undo keeps failing so a person can fix it.`,
+      },
+    ],
+  },
+  {
+    category: "Resilience / control",
+    patterns: [
+      {
+        id: "circuit-breaker",
+        name: "Circuit Breaker",
+        trigger: "A failing dependency is being hammered with doomed calls, wasting resources and slowing everything down.",
+        implementation: `Wrap calls to a remote service in an object that keeps three states and a failure count. In the closed state calls go through and the count goes up on each failure, and when the count passes your limit inside a time window the object switches to open and starts a timer. In the open state every call returns an error right away without touching the network, so threads and connections are not tied up waiting. When the timer runs out the object moves to half-open and lets a few calls through, and it goes back to closed after enough of them succeed or back to open the moment one fails.`,
+      },
+      {
+        id: "retry-with-backoff-and-jitter",
+        name: "Retry with Backoff and Jitter",
+        trigger: "Failures are transient, but naive retries risk synchronized retry storms.",
+        implementation: `When a call fails with a temporary error, wait before trying again and make each wait longer than the last, for example base times 2 to the power of the attempt number, capped at a maximum. Pick the actual wait as a random number between zero and that capped value, so many clients failing at the same moment do not all retry at the same moment. Stop after a fixed number of attempts, and only retry calls that are safe to run more than once, which usually means the client sends an ID with the request and the server ignores a repeat of an ID it already handled. Retry at one layer of the call chain, not at every layer, because nested retries multiply into a huge amount of extra traffic.`,
+      },
+      {
+        id: "bulkhead",
+        name: "Bulkhead",
+        trigger: "One misbehaving workload or tenant can exhaust shared pools and take down unrelated functionality.",
+        implementation: `Split your servers, threads, and connection pools into separate groups, one group per caller or per dependency. Give each group a fixed limit, such as its own set of 10 database connections, or its own container with a memory cap and a CPU cap. When one dependency stops answering, only the group assigned to it runs out of connections, and calls to the other dependencies keep working. Choose the group boundaries by customer, by feature, or by dependency, and track each group's error rate and response time separately.`,
+      },
+      {
+        id: "rate-limiting",
+        name: "Rate Limiting",
+        trigger: "Your own callers or jobs must be paced to stay within a downstream service's limits.",
+        implementation: `Find the fixed amount of work the downstream service accepts per time slice, for example 100 writes per second. Put outgoing records into a queue that can hold all of them, then have worker processes pull small batches off the queue on a timer, such as 20 records every 200 milliseconds, instead of sending everything at once. When several workers share one limit, keep numbered lock records in a shared store where each lock is worth a fixed share of the limit, and let each worker take short leases and send only as much as its current locks allow. Keep handling rejection responses anyway, and retry those records after a short random wait.`,
+      },
+      {
+        id: "throttling",
+        name: "Throttling",
+        trigger: "Demand can exceed capacity and you'd rather shed or slow load than fail entirely.",
+        implementation: `Count every request against the caller it came from, using a counter per API key or per tenant in a shared store, and compare that count to a configured limit for a time window. When a caller goes over, stop the request early, before expensive parsing or lookups, and return HTTP 429 with a Retry-After header that says how long to wait. Also measure whatever runs out first, such as the number of requests being worked on or the queue length, and begin rejecting a growing share of traffic before that number hits the hard cap. Store the limits in a configuration file or store you can change while the system runs.`,
+      },
+      {
+        id: "shuffle-sharding",
+        name: "Shuffle Sharding",
+        trigger: "A single abusive tenant in a shared fleet would otherwise degrade a large fraction of customers.",
+        implementation: `Instead of giving each customer one fixed group of servers, give each customer a small random combination of servers, for example 2 servers out of 8. Compute that combination from a hash of the customer id, so every router picks the same two servers for that customer without keeping a lookup table. Have the client or router retry on the customer's other server, so a customer sending bad or heavy traffic only harms the few customers whose combination matches on both servers. Give each customer more servers, or grow the total pool, to lower the chance that two customers get an identical combination.`,
+      },
+      {
+        id: "leader-election",
+        name: "Leader Election",
+        trigger: "Exactly one instance in a cluster must coordinate or own a task at a time.",
+        implementation: `Every copy of your worker runs the same code, so you pick one to be in charge. Each copy races to take a shared lock, for example by writing a row in a table or taking a lease on a file, where only one writer can win. The winner runs the coordinating work and keeps renewing the lock on a timer that is shorter than the lock's expiry time. If that copy crashes and stops renewing, the lock expires, and the other copies, which keep retrying the lock in a loop, take over.`,
+      },
+      {
+        id: "scheduler-agent-supervisor",
+        name: "Scheduler Agent Supervisor",
+        trigger: "Long-running distributed workflows need something to detect and recover stalled or failed steps.",
+        implementation: `Split the work into three parts. The Scheduler runs the steps of a job in order and writes each step's state into a database row with fields like status, owner instance, retry count, and a complete-by time, which is the deadline for that step. When a step needs an outside service, the Scheduler sends a message on a queue to an Agent, which makes the call, retries short failures, and gives up silently once the deadline passes. The Supervisor runs on a timer, finds rows still marked running past their deadline, and either resets them to pending so the Scheduler retries, or, after too many retries, marks them failed and starts undo steps.`,
+      },
+    ],
+  },
+  {
+    category: "Topology / deployment",
+    patterns: [
+      {
+        id: "deployment-stamps",
+        name: "Deployment Stamps",
+        trigger: "You need to cap blast radius and scale by cloning independent units rather than growing one stack.",
+        implementation: `Package your whole application, including its database, as one deployable unit, and deploy many identical copies of it. Each copy is a stamp, and each stamp serves a fixed set of customers, so a stamp in one region can hold customers A, B, and C while another holds D. Write the deployment as code so each stamp comes out the same, and roll out updates stamp by stamp. Route requests either by giving each stamp its own hostname, or by putting a lookup service in front that reads a customer-to-stamp table and forwards the request to that stamp's address.`,
+      },
+      {
+        id: "geodes",
+        name: "Geodes",
+        trigger: "Users are globally distributed and need low-latency reads and writes from any region.",
+        implementation: `Deploy the same full copy of your backend into several regions around the world, and let any copy answer any request from any user. Put a global load balancer in front that sends each user to the nearest copy. Behind them all, use a database that replicates writes between every region, so the data is the same everywhere and no copy needs another copy to work. If a region goes down, the load balancer sends its traffic to the remaining copies, which already have the data.`,
+      },
+      {
+        id: "sidecar",
+        name: "Sidecar",
+        trigger: "Cross-cutting concerns like TLS, telemetry, or config must be added without touching app code.",
+        implementation: `Package the extra work as its own program in its own container, then deploy that container on the same host next to your main application container. Give every copy of the application its own copy of this sidecar, started before the app and stopped after it, so the two live and die together. The application talks to the sidecar over a local connection like HTTP on localhost or a shared file path, so the sidecar can handle jobs like sending logs, reading configuration, or acting as the network proxy for outgoing calls. Because it is a separate program, you can write it in any language and update it without rebuilding the application.`,
+      },
+      {
+        id: "service-discovery",
+        name: "Service Discovery",
+        trigger: "Service instances come and go dynamically, so endpoints can't be hardcoded.",
+        implementation: `Run a registry service that holds a table of service names, instance IDs, IP addresses, and port numbers, and put it at a fixed address that every client is configured with. When a service instance starts, it sends a POST to the registry to add its row, and it deletes that row when it shuts down. The registry calls each instance's health check URL on a timer and removes rows that stop responding, so dead addresses do not pile up. A caller then asks the registry for the current addresses for a service name and picks one, or a load balancer does that lookup for it.`,
+      },
+      {
+        id: "publisher-subscriber",
+        name: "Publisher-Subscriber",
+        trigger: "One event needs to reach many consumers whose identities the producer shouldn't know.",
+        implementation: `Run a message broker in the middle. The sending code writes a message to a named topic and gets an immediate acknowledgment back, without knowing who reads it. Each reader creates its own subscription on that topic, optionally with a filter so it only gets messages matching a rule, and the broker copies every matching message into that subscription's own queue. Give each message a unique ID, write readers so processing the same message twice is harmless, and point failures to a dead-letter queue where bad messages are stored for later inspection.`,
+      },
+      {
+        id: "canary-release",
+        name: "Canary Release",
+        trigger: "A risky change needs real production traffic on a small slice before full rollout.",
+        implementation: `Deploy the new version onto separate servers that start with zero traffic. Change the load balancer or router rules to send a small share of requests, for example 1 percent, to the new servers, chosen by rule such as internal staff accounts or a random sample. Watch error rates, response times, and resource use from both versions side by side, and raise the share in steps as the numbers stay good. If the numbers get worse, set the routing rule back to 0 percent so all requests return to the old version.`,
+      },
+      {
+        id: "blue-green-deployment",
+        name: "Blue-Green Deployment",
+        trigger: "Deploys need near-zero downtime and instant rollback.",
+        implementation: `Run two copies of your production setup, blue and green, built to be as close to identical as possible. Only one takes real user traffic, and a router in front picks which one, so you deploy the new version to the idle copy and test it there before flipping the router. If something breaks, flip the router back to the old copy. For database changes, first change the schema so it works with both old and new code, deploy that, then deploy the new code.`,
+      },
+      {
+        id: "feature-toggles",
+        name: "Feature Toggles",
+        trigger: "Release timing must be decoupled from deploy timing, or behavior toggled without a redeploy.",
+        implementation: `Wrap the new code in an if statement that asks a function whether a named feature is on, and run the old code in the else branch. That function reads the on/off value from somewhere you can change without redeploying, such as a config file, a row in a database table, or a shared key-value store. Keep the check out of your business code by putting it in a small decision object that you pass in, so the business code only sees a true or false. Delete the toggle and the dead branch once the feature is fully on, and track each toggle as a task so they do not pile up.`,
+      },
+    ],
+  },
+  {
+    category: "Migration / boundaries",
+    patterns: [
+      {
+        id: "strangler-fig",
+        name: "Strangler Fig",
+        trigger: "A legacy system must be replaced incrementally because a big-bang rewrite is too risky.",
+        implementation: `Put an interceptor in front of the old system, usually a router or proxy that receives every request first. At the start it forwards all requests to the old system. Then pick one piece of behavior, build it in the new system, and change the router so requests for that one piece go to the new code while everything else still goes to the old code. Repeat piece by piece, deleting each part of the old system once nothing routes to it, until the old system handles nothing and can be shut off.`,
+      },
+      {
+        id: "anti-corruption-layer",
+        name: "Anti-Corruption Layer",
+        trigger: "A legacy or third-party model would otherwise leak its concepts into your clean domain.",
+        implementation: `Write a separate piece of code that sits between your new system and the old or outside system, and make it the only thing that talks to that other system. Your new code calls this layer using your own data shapes and names, and the layer converts each call into the request format the other system expects, then converts the reply back. Keep only conversion work in there, no business rules, and add input checks and logging so you can find conversion failures. You can build it as a library inside your app or as its own service, and you can delete it once the old system is gone.`,
+      },
+      {
+        id: "gatekeeper",
+        name: "Gatekeeper",
+        trigger: "Untrusted external traffic needs validation and sanitization before it can touch sensitive systems.",
+        implementation: `Put a separate service in front of your real service, and make it the only thing clients can reach. That front service checks each incoming request: is the caller allowed, are the fields the right shape and size, is this caller sending too many requests per second. Requests that fail a check get rejected right there, and only approved requests get forwarded to the internal service over a private address that the outside world cannot call. The front service runs with no database passwords or storage keys of its own, so someone who breaks into it still cannot read your data.`,
+      },
+      {
+        id: "federated-identity",
+        name: "Federated Identity",
+        trigger: "Authentication should be delegated to an external identity provider instead of managing credentials.",
+        implementation: `Stop storing passwords in your app and let a separate login service handle sign-in. When someone opens your app without a valid session, your app redirects the browser to that login service, which asks for the password and any second factor. On success it sends the browser back to your app with a short code, your app trades that code for a signed token, and the token holds facts about the user such as their user id, email, and roles. Every later request carries that token, and your app checks the signature and reads the roles to decide what the user may do.`,
+      },
+      {
+        id: "distributed-tracing",
+        name: "Distributed Tracing",
+        trigger: "A request crosses many services and you can't tell where latency or failures originate.",
+        implementation: `Give every incoming request a random trace id at the first service that receives it, and give each unit of work inside that request its own span id with a pointer to its parent span. Pass both ids to every downstream call by adding them as HTTP headers, and have the receiving service read those headers instead of making new ids. Each service records a start time, an end time, and the two ids for its own work, then sends that record to a central trace collector. Also print the trace id in every log line, so you can pull up one request's full path and see which step was slow.`,
+      },
+    ],
+  },
+];
