@@ -138,18 +138,18 @@ ul.patterns a:hover { color: var(--accent); }
   font-size: 0.9rem;
 }
 
-/* Test */
+/* Quiz */
 #app.wide {
   max-width: 64rem;
 }
-.test-bar {
+.quiz-bar {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 1rem;
   margin-bottom: 2rem;
 }
-.test-bar select {
+.quiz-bar select {
   font: inherit;
   color: var(--fg);
   background: var(--bg);
@@ -157,22 +157,22 @@ ul.patterns a:hover { color: var(--accent); }
   border-radius: 4px;
   padding: 0.4rem 0.5rem;
 }
-.test-bar .count {
+.quiz-bar .count {
   color: var(--muted);
   font-size: 0.9rem;
 }
-.test-bar .reset {
+.quiz-bar .reset {
   font-size: 0.9rem;
   margin-left: auto;
 }
-.test-grid {
+.quiz-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 2.5rem;
   align-items: start;
 }
 @media (max-width: 40rem) {
-  .test-grid {
+  .quiz-grid {
     grid-template-columns: 1fr;
     gap: 1.5rem;
   }

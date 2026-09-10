@@ -1,4 +1,4 @@
-// Hash routing: #/ splash, #/learn list, #/pattern/<id> detail, #/test quiz.
+// Hash routing: #/ splash, #/learn list, #/pattern/<id> detail, #/quiz quiz page.
 const app = document.getElementById("app");
 
 const byId = {};
@@ -23,7 +23,7 @@ function splashView() {
       <h1>@lancedolan's system design toolbelt</h1>
       <div class="ctas">
         <a class="cta" href="#/learn">learn</a>
-        <a class="cta" href="#/test">test</a>
+        <a class="cta" href="#/quiz">quiz</a>
       </div>
     </div>`;
 }
@@ -78,7 +78,7 @@ async function drawDiagram(id) {
   }
 }
 
-/* ---------- test page ---------- */
+/* ---------- quiz page ---------- */
 
 const SOLVED_KEY = "toolbelt-solved";
 
@@ -107,64 +107,64 @@ PATTERN_CATEGORIES.forEach((c, i) =>
   c.patterns.forEach((p) => (categoryOf[p.id] = i))
 );
 
-const testState = { category: "all", scenario: null, wrong: new Set(), solved: false };
+const quizState = { category: "all", scenario: null, wrong: new Set(), solved: false };
 
 function inCategory(scenario) {
-  if (testState.category === "all") return true;
-  const want = Number(testState.category);
+  if (quizState.category === "all") return true;
+  const want = Number(quizState.category);
   return scenario.answers.some((id) => categoryOf[id] === want);
 }
 
 function categoryName() {
-  return testState.category === "all"
+  return quizState.category === "all"
     ? null
-    : PATTERN_CATEGORIES[Number(testState.category)].category;
+    : PATTERN_CATEGORIES[Number(quizState.category)].category;
 }
 
 function pickScenario() {
   const pool = SCENARIOS.filter((s) => inCategory(s) && !solved.has(s.id));
-  testState.scenario = pool.length
+  quizState.scenario = pool.length
     ? pool[Math.floor(Math.random() * pool.length)]
     : null;
-  testState.wrong = new Set();
-  testState.solved = false;
+  quizState.wrong = new Set();
+  quizState.solved = false;
 }
 
 function clearScenario() {
-  testState.scenario = null;
-  testState.wrong = new Set();
-  testState.solved = false;
+  quizState.scenario = null;
+  quizState.wrong = new Set();
+  quizState.solved = false;
 }
 
-function testBar() {
+function quizBar() {
   const inFilter = SCENARIOS.filter(inCategory);
   const done = inFilter.filter((s) => solved.has(s.id)).length;
   const options = [
-    `<option value="all"${testState.category === "all" ? " selected" : ""}>all categories</option>`,
+    `<option value="all"${quizState.category === "all" ? " selected" : ""}>all categories</option>`,
     ...PATTERN_CATEGORIES.map(
       (c, i) =>
-        `<option value="${i}"${String(i) === String(testState.category) ? " selected" : ""}>${esc(c.category)}</option>`
+        `<option value="${i}"${String(i) === String(quizState.category) ? " selected" : ""}>${esc(c.category)}</option>`
     ),
   ].join("");
   return `
-    <div class="test-bar">
+    <div class="quiz-bar">
       <select id="category">${options}</select>
       <span class="count">${done} of ${inFilter.length} solved</span>
-      <a class="reset" href="#/test" data-reset>reset progress</a>
+      <a class="reset" href="#/quiz" data-reset>reset progress</a>
     </div>`;
 }
 
 function choices() {
   return PATTERN_CATEGORIES.map((c, i) => {
-    if (testState.category !== "all" && String(i) !== String(testState.category))
+    if (quizState.category !== "all" && String(i) !== String(quizState.category))
       return "";
     const buttons = c.patterns
       .map((p) => {
         let cls = "choice";
-        if (testState.wrong.has(p.id)) cls += " wrong";
-        if (testState.solved && testState.scenario.answers.includes(p.id))
+        if (quizState.wrong.has(p.id)) cls += " wrong";
+        if (quizState.solved && quizState.scenario.answers.includes(p.id))
           cls += " correct";
-        const off = testState.solved || testState.wrong.has(p.id) ? " disabled" : "";
+        const off = quizState.solved || quizState.wrong.has(p.id) ? " disabled" : "";
         return `<button class="${cls}" data-pick="${p.id}"${off}>${esc(p.name)}</button>`;
       })
       .join("");
@@ -185,15 +185,15 @@ function allDoneView() {
     </div>`;
 }
 
-function testView() {
-  const body = testState.scenario
+function quizView() {
+  const body = quizState.scenario
     ? `
-      <div class="test-grid">
+      <div class="quiz-grid">
         <div class="scenario">
           <h1 class="col-title">Your scenario...</h1>
-          <p>${esc(testState.scenario.text)}</p>
+          <p>${esc(quizState.scenario.text)}</p>
           ${
-            testState.solved
+            quizState.solved
               ? `<div class="success">
                    <p>Correct. That is the one to reach for. 🎉</p>
                    <button class="cta" data-next>next scenario</button>
@@ -204,24 +204,24 @@ function testView() {
         <div class="picks"><h1 class="col-title">You reach for...</h1>${choices()}</div>
       </div>`
     : allDoneView();
-  return `<a class="back" href="#/">&larr; back</a>${testBar()}${body}`;
+  return `<a class="back" href="#/">&larr; back</a>${quizBar()}${body}`;
 }
 
-function renderTest() {
-  if (!testState.scenario && !testState.solved) pickScenario();
-  app.innerHTML = testView();
+function renderQuiz() {
+  if (!quizState.scenario && !quizState.solved) pickScenario();
+  app.innerHTML = quizView();
 }
 
 function pick(id) {
-  if (testState.solved || !testState.scenario) return;
-  if (testState.scenario.answers.includes(id)) {
-    testState.solved = true;
-    solved.add(testState.scenario.id);
+  if (quizState.solved || !quizState.scenario) return;
+  if (quizState.scenario.answers.includes(id)) {
+    quizState.solved = true;
+    solved.add(quizState.scenario.id);
     saveSolved();
   } else {
-    testState.wrong.add(id);
+    quizState.wrong.add(id);
   }
-  app.innerHTML = testView();
+  app.innerHTML = quizView();
 }
 
 app.addEventListener("click", (e) => {
@@ -232,7 +232,7 @@ app.addEventListener("click", (e) => {
   }
   if (e.target.closest("[data-next]")) {
     clearScenario();
-    renderTest();
+    renderQuiz();
     window.scrollTo(0, 0);
     return;
   }
@@ -242,28 +242,28 @@ app.addEventListener("click", (e) => {
     solved.clear();
     saveSolved();
     clearScenario();
-    renderTest();
+    renderQuiz();
     window.scrollTo(0, 0);
   }
 });
 
 app.addEventListener("change", (e) => {
   if (e.target.id !== "category") return;
-  testState.category = e.target.value;
+  quizState.category = e.target.value;
   clearScenario();
-  renderTest();
+  renderQuiz();
 });
 
 function render() {
   const hash = location.hash.replace(/^#/, "");
   const patternMatch = hash.match(/^\/pattern\/([a-z0-9-]+)$/);
 
-  app.classList.toggle("wide", hash === "/test");
+  app.classList.toggle("wide", hash === "/quiz");
 
   if (hash === "/learn") {
     app.innerHTML = learnView();
-  } else if (hash === "/test") {
-    renderTest();
+  } else if (hash === "/quiz") {
+    renderQuiz();
   } else if (patternMatch && byId[patternMatch[1]]) {
     const id = patternMatch[1];
     app.innerHTML = detailView(byId[id]);
@@ -275,8 +275,8 @@ function render() {
 }
 
 window.addEventListener("hashchange", () => {
-  // The category filter is not in the address, so arriving at #/test resets it.
-  if (location.hash === "#/test") testState.category = "all";
+  // The category filter is not in the address, so arriving at #/quiz resets it.
+  if (location.hash === "#/quiz") quizState.category = "all";
   render();
 });
 window
