@@ -180,7 +180,12 @@ ul.patterns a:hover { color: var(--accent); }
 .scenario p {
   margin: 0 0 1rem;
 }
-.picks .category:first-child {
+.col-title {
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin: 0 0 1.25rem;
+}
+.picks .category:first-of-type {
   margin-top: 0;
 }
 .choices {

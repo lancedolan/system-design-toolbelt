@@ -190,6 +190,7 @@ function testView() {
     ? `
       <div class="test-grid">
         <div class="scenario">
+          <h1 class="col-title">Your scenario</h1>
           <p>${esc(testState.scenario.text)}</p>
           ${
             testState.solved
@@ -200,7 +201,7 @@ function testView() {
               : ""
           }
         </div>
-        <div class="picks">${choices()}</div>
+        <div class="picks"><h1 class="col-title">You reach for...</h1>${choices()}</div>
       </div>`
     : allDoneView();
   return `<a class="back" href="#/">&larr; back</a>${testBar()}${body}`;
