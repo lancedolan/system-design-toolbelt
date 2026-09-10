@@ -190,7 +190,7 @@ function testView() {
     ? `
       <div class="test-grid">
         <div class="scenario">
-          <h1 class="col-title">Your scenario</h1>
+          <h1 class="col-title">Your scenario...</h1>
           <p>${esc(testState.scenario.text)}</p>
           ${
             testState.solved
