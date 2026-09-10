@@ -118,6 +118,9 @@ ul.patterns a:hover { color: var(--accent); }
   color: var(--muted);
   margin: 0 0 2rem;
 }
+.detail h3:first-of-type {
+  margin-top: 1.5rem;
+}
 .detail h3 {
   font-size: 0.85rem;
   text-transform: uppercase;

@@ -54,6 +54,7 @@ function detailView(pattern) {
     <a class="back" href="#/learn">&larr; all patterns</a>
     <div class="detail">
       <h1>${esc(pattern.name)}</h1>
+      <h3>When to use</h3>
       <p class="trigger">${esc(pattern.trigger)}</p>
       <div class="diagram" id="diagram"></div>
       <h3>How to implement</h3>
