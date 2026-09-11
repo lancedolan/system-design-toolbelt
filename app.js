@@ -107,18 +107,27 @@ PATTERN_CATEGORIES.forEach((c, i) =>
   c.patterns.forEach((p) => (categoryOf[p.id] = i))
 );
 
-const quizState = { category: "all", scenario: null, wrong: new Set(), solved: false };
+// An empty `categories` set means every category is in play.
+const quizState = {
+  categories: new Set(),
+  scenario: null,
+  wrong: new Set(),
+  solved: false,
+};
+
+function showCategory(i) {
+  return quizState.categories.size === 0 || quizState.categories.has(i);
+}
 
 function inCategory(scenario) {
-  if (quizState.category === "all") return true;
-  const want = Number(quizState.category);
-  return scenario.answers.some((id) => categoryOf[id] === want);
+  if (quizState.categories.size === 0) return true;
+  return scenario.answers.some((id) => quizState.categories.has(categoryOf[id]));
 }
 
 function categoryName() {
-  return quizState.category === "all"
-    ? null
-    : PATTERN_CATEGORIES[Number(quizState.category)].category;
+  if (quizState.categories.size !== 1) return null;
+  const [only] = quizState.categories;
+  return PATTERN_CATEGORIES[only].category;
 }
 
 function pickScenario() {
@@ -139,16 +148,17 @@ function clearScenario() {
 function quizBar() {
   const inFilter = SCENARIOS.filter(inCategory);
   const done = inFilter.filter((s) => solved.has(s.id)).length;
-  const options = [
-    `<option value="all"${quizState.category === "all" ? " selected" : ""}>all categories</option>`,
-    ...PATTERN_CATEGORIES.map(
-      (c, i) =>
-        `<option value="${i}"${String(i) === String(quizState.category) ? " selected" : ""}>${esc(c.category)}</option>`
-    ),
+  const all = quizState.categories.size === 0;
+  const chips = [
+    `<button class="chip${all ? " on" : ""}" data-cat="all" aria-pressed="${all}">all categories</button>`,
+    ...PATTERN_CATEGORIES.map((c, i) => {
+      const on = quizState.categories.has(i);
+      return `<button class="chip${on ? " on" : ""}" data-cat="${i}" aria-pressed="${on}">${esc(c.category)}</button>`;
+    }),
   ].join("");
   return `
     <div class="quiz-bar">
-      <select id="category">${options}</select>
+      <div class="filters" role="group" aria-label="filter scenarios by category">${chips}</div>
       <span class="count">${done} of ${inFilter.length} solved</span>
       <span class="meter" role="progressbar" aria-valuenow="${done}" aria-valuemin="0" aria-valuemax="${inFilter.length}" aria-label="scenarios solved"><span class="meter-fill" style="width: ${inFilter.length ? (done / inFilter.length) * 100 : 0}%"></span></span>
       <a class="reset" href="#/quiz" data-reset>reset progress</a>
@@ -157,8 +167,7 @@ function quizBar() {
 
 function choices() {
   return PATTERN_CATEGORIES.map((c, i) => {
-    if (quizState.category !== "all" && String(i) !== String(quizState.category))
-      return "";
+    if (!showCategory(i)) return "";
     const buttons = c.patterns
       .map((p) => {
         let cls = "choice";
@@ -175,9 +184,12 @@ function choices() {
 
 function allDoneView() {
   const name = categoryName();
+  const picked = quizState.categories.size;
   const what = name
     ? `every ${esc(name)} scenario`
-    : `all ${SCENARIOS.length} scenarios`;
+    : picked
+      ? `every scenario in the ${picked} categories you picked`
+      : `all ${SCENARIOS.length} scenarios`;
   return `
     <div class="all-done">
       <div class="party">🎉</div>
@@ -202,7 +214,7 @@ function quizView() {
               : ""
           }
         </div>
-        <div class="picks"><h1 class="col-title">You reach for...</h1>${choices()}</div>
+        <div class="picks"><h1 class="col-title">You reach for...🔨</h1>${choices()}</div>
       </div>`
     : allDoneView();
   return `<a class="back" href="#/">&larr; back</a>${quizBar()}${body}`;
@@ -237,6 +249,22 @@ app.addEventListener("click", (e) => {
     window.scrollTo(0, 0);
     return;
   }
+  const chip = e.target.closest("[data-cat]");
+  if (chip) {
+    const value = chip.dataset.cat;
+    if (value === "all") {
+      quizState.categories.clear();
+    } else {
+      const i = Number(value);
+      if (quizState.categories.has(i)) quizState.categories.delete(i);
+      else quizState.categories.add(i);
+    }
+    clearScenario();
+    renderQuiz();
+    const again = app.querySelector(`[data-cat="${value}"]`);
+    if (again) again.focus();
+    return;
+  }
   const reset = e.target.closest("[data-reset]");
   if (reset) {
     e.preventDefault();
@@ -246,13 +274,6 @@ app.addEventListener("click", (e) => {
     renderQuiz();
     window.scrollTo(0, 0);
   }
-});
-
-app.addEventListener("change", (e) => {
-  if (e.target.id !== "category") return;
-  quizState.category = e.target.value;
-  clearScenario();
-  renderQuiz();
 });
 
 function render() {
@@ -277,7 +298,7 @@ function render() {
 
 window.addEventListener("hashchange", () => {
   // The category filter is not in the address, so arriving at #/quiz resets it.
-  if (location.hash === "#/quiz") quizState.category = "all";
+  if (location.hash === "#/quiz") quizState.categories.clear();
   render();
 });
 window
