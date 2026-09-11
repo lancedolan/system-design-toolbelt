@@ -11,11 +11,17 @@ function darkMode() {
   return window.matchMedia("(prefers-color-scheme: dark)").matches;
 }
 
-mermaid.initialize({
+// useMaxWidth off keeps a diagram at its natural size instead of stretching a
+// small one across the column; .diagram shrinks anything too wide to fit.
+const mermaidConfig = () => ({
   startOnLoad: false,
   theme: darkMode() ? "dark" : "default",
   securityLevel: "strict",
+  flowchart: { useMaxWidth: false },
+  sequence: { useMaxWidth: false },
 });
+
+mermaid.initialize(mermaidConfig());
 
 function splashView() {
   return `
@@ -62,20 +68,36 @@ function detailView(pattern) {
     </div>`;
 }
 
-async function drawDiagram(id) {
+// Mermaid needs a unique id per render or leftover nodes from an earlier draw
+// collide with the new one.
+let drawCount = 0;
+
+async function draw(target, source, onError) {
+  if (!target || !source) return;
+  try {
+    const { svg } = await mermaid.render("mermaid-" + drawCount++, source);
+    target.innerHTML = svg;
+  } catch (e) {
+    target.innerHTML = onError;
+  }
+}
+
+function drawDiagram(id) {
   const target = document.getElementById("diagram");
-  const source = DIAGRAMS[id];
   if (!target) return;
-  if (!source) {
+  if (!DIAGRAMS[id]) {
     target.innerHTML = `<p class="diagram-error">No diagram yet.</p>`;
     return;
   }
-  try {
-    const { svg } = await mermaid.render("mermaid-" + id, source);
-    target.innerHTML = svg;
-  } catch (e) {
-    target.innerHTML = `<p class="diagram-error">Diagram failed to draw.</p>`;
-  }
+  draw(target, DIAGRAMS[id], `<p class="diagram-error">Diagram failed to draw.</p>`);
+}
+
+// A scenario with no diagram just shows its text, so a failed draw removes the
+// empty box rather than announcing itself.
+function drawScenarioDiagram() {
+  const target = document.getElementById("scenario-diagram");
+  if (!target || !quizState.scenario) return;
+  draw(target, SCENARIO_DIAGRAMS[quizState.scenario.id], "");
 }
 
 /* ---------- quiz page ---------- */
@@ -206,6 +228,11 @@ function quizView() {
           <h1 class="col-title">Your scenario...🤔</h1>
           <p>${esc(quizState.scenario.text)}</p>
           ${
+            SCENARIO_DIAGRAMS[quizState.scenario.id]
+              ? `<div class="diagram scenario-diagram" id="scenario-diagram" title="tap to enlarge"></div>`
+              : ""
+          }
+          ${
             quizState.solved
               ? `<div class="success">
                    <p>Correct. That is the one to reach for. 🎉</p>
@@ -220,9 +247,14 @@ function quizView() {
   return `<a class="back" href="#/">&larr; back</a>${quizBar()}${body}`;
 }
 
+function paintQuiz() {
+  app.innerHTML = quizView();
+  drawScenarioDiagram();
+}
+
 function renderQuiz() {
   if (!quizState.scenario && !quizState.solved) pickScenario();
-  app.innerHTML = quizView();
+  paintQuiz();
 }
 
 function pick(id) {
@@ -234,10 +266,21 @@ function pick(id) {
   } else {
     quizState.wrong.add(id);
   }
-  app.innerHTML = quizView();
+  paintQuiz();
 }
 
+// Tapping the scenario diagram opens a copy of it full screen, since on a phone
+// it is drawn too small to read in the column.
 app.addEventListener("click", (e) => {
+  const diagram = e.target.closest(".scenario-diagram");
+  if (diagram && diagram.innerHTML) {
+    const zoom = document.createElement("div");
+    zoom.className = "zoom";
+    zoom.innerHTML = diagram.innerHTML;
+    zoom.addEventListener("click", () => zoom.remove());
+    document.body.appendChild(zoom);
+    return;
+  }
   const choice = e.target.closest("[data-pick]");
   if (choice) {
     pick(choice.dataset.pick);
@@ -304,11 +347,7 @@ window.addEventListener("hashchange", () => {
 window
   .matchMedia("(prefers-color-scheme: dark)")
   .addEventListener("change", () => {
-    mermaid.initialize({
-      startOnLoad: false,
-      theme: darkMode() ? "dark" : "default",
-      securityLevel: "strict",
-    });
+    mermaid.initialize(mermaidConfig());
     render();
   });
 render();

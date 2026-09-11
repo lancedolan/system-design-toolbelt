@@ -137,10 +137,34 @@ ul.patterns a:hover { color: var(--accent); }
   color: var(--muted);
   font-size: 0.9rem;
 }
+.scenario-diagram {
+  cursor: zoom-in;
+}
+/* Full-screen copy of the scenario diagram, shown while tapped. */
+.zoom {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  overflow: auto;
+  cursor: zoom-out;
+  background: var(--bg);
+}
+/* At least 60rem wide so a phone can pan around a readable copy instead of
+   shrinking it to the screen again. */
+.zoom svg {
+  width: max(100%, 60rem);
+  max-width: none;
+  height: auto;
+  flex: none;
+}
 
 /* Quiz */
 #app.wide {
-  max-width: 64rem;
+  max-width: 78rem;
 }
 .quiz-bar {
   display: flex;
@@ -198,7 +222,7 @@ ul.patterns a:hover { color: var(--accent); }
 }
 .quiz-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1.35fr 1fr;
   gap: 2.5rem;
   align-items: start;
 }
