@@ -203,7 +203,7 @@ function quizView() {
     ? `
       <div class="quiz-grid">
         <div class="scenario">
-          <h1 class="col-title">Your scenario...</h1>
+          <h1 class="col-title">Your scenario...🤔</h1>
           <p>${esc(quizState.scenario.text)}</p>
           ${
             quizState.solved
