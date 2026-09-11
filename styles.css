@@ -140,6 +140,11 @@ ul.patterns a:hover { color: var(--accent); }
 .scenario-diagram {
   cursor: zoom-in;
 }
+.diagram-key {
+  color: var(--muted);
+  font-size: 0.85rem;
+  margin: -0.5rem 0 0;
+}
 /* Full-screen copy of the scenario diagram, shown while tapped. */
 .zoom {
   position: fixed;

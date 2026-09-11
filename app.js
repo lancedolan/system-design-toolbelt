@@ -92,12 +92,21 @@ function drawDiagram(id) {
   draw(target, DIAGRAMS[id], `<p class="diagram-error">Diagram failed to draw.</p>`);
 }
 
+// Once the scenario is solved it shows the "solved" diagram instead, if there is
+// one. Scenarios with no solved diagram keep showing the "before" one.
+function scenarioDiagram() {
+  if (!quizState.scenario) return null;
+  const id = quizState.scenario.id;
+  const solvedSource = quizState.solved ? SOLVED_SCENARIO_DIAGRAMS[id] : null;
+  return solvedSource || SCENARIO_DIAGRAMS[id];
+}
+
 // A scenario with no diagram just shows its text, so a failed draw removes the
 // empty box rather than announcing itself.
 function drawScenarioDiagram() {
   const target = document.getElementById("scenario-diagram");
-  if (!target || !quizState.scenario) return;
-  draw(target, SCENARIO_DIAGRAMS[quizState.scenario.id], "");
+  if (!target) return;
+  draw(target, scenarioDiagram(), "");
 }
 
 /* ---------- quiz page ---------- */
@@ -228,8 +237,14 @@ function quizView() {
           <h1 class="col-title">Your scenario...🤔</h1>
           <p>${esc(quizState.scenario.text)}</p>
           ${
-            SCENARIO_DIAGRAMS[quizState.scenario.id]
-              ? `<div class="diagram scenario-diagram" id="scenario-diagram" title="tap to enlarge"></div>`
+            scenarioDiagram()
+              ? `<div class="diagram scenario-diagram" id="scenario-diagram" title="tap to enlarge"></div>
+                 ${
+                   quizState.solved &&
+                   SOLVED_SCENARIO_DIAGRAMS[quizState.scenario.id]
+                     ? `<p class="diagram-key">Green is added or changed. Red is removed.</p>`
+                     : ""
+                 }`
               : ""
           }
           ${

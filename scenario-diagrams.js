@@ -611,3 +611,33 @@ const SCENARIO_DIAGRAMS = {
   pool --> files[(Generated statement store)]`,
 
 };
+
+// Mermaid source for the "solved" diagram of a quiz scenario, keyed by scenario
+// id. Shown after the correct pattern is picked. Same architecture as the
+// "before" diagram, with green for anything added or changed and red for
+// anything removed. Scenarios missing from this map keep showing their "before"
+// diagram.
+const SOLVED_SCENARIO_DIAGRAMS = {
+  "dead-letter-queue-1": `flowchart TD
+  partner["Partner systems"] -->|"12 orders with malformed country code"| api["Order API"]
+  storefront["Storefront"] --> api
+  api -->|enqueue| queue[["Order queue · backlog drains, fresh orders move"]]
+  queue -->|delivers| consumer["Order consumer · full capacity on fresh orders"]
+  consumer -.->|"no longer redelivered forever"| queue
+  consumer -->|"still fails after 3 attempts, move message"| dlq[["Dead letter queue · keeps body and headers"]]
+  consumer -->|"orders that parse"| wms["Warehouse system"]
+  consumer -->|"12 parse errors, logged once each"| logs[("Error logs")]
+  wms --> orders[(Order DB)]
+  dlq --> team["Partner integration team · inspects each order"]
+  team -->|"resubmit once country code is fixed"| api
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class queue,consumer,dlq,team added;
+  linkStyle 3 stroke:#16a34a,stroke-width:3px;
+  linkStyle 4 stroke:#dc2626,stroke-width:3px;
+  linkStyle 5 stroke:#16a34a,stroke-width:3px;
+  linkStyle 7 stroke:#16a34a,stroke-width:3px;
+  linkStyle 9 stroke:#16a34a,stroke-width:3px;
+  linkStyle 10 stroke:#16a34a,stroke-width:3px;`,
+
+};
