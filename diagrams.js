@@ -3,13 +3,20 @@ const DIAGRAMS = {
   "asynchronous-request-reply": `sequenceDiagram
   participant Client
   participant API
+  participant DB
+  participant Queue
   participant Worker
   Client->>API: POST job
-  API-->>Client: 202 Accepted plus status url
-  API->>Worker: enqueue work
-  Worker->>Worker: process
+  API->>DB: save job 7 as Pending
+  API->>Queue: enqueue job 7
+  API-->>Client: 202 Accepted, Location status url, Retry-After
+  Queue-->>Worker: job 7
+  Worker->>DB: job 7 Running
   Client->>API: GET status url
-  API-->>Client: 200 with result`,
+  API-->>Client: 200 Running
+  Worker->>DB: job 7 Succeeded with result
+  Client->>API: GET status url
+  API-->>Client: 303 See Other to result url`,
 
   "queue-based-load-leveling": `flowchart LR
   client[Client] -->|bursty writes| api[API]
@@ -27,11 +34,11 @@ const DIAGRAMS = {
   w3 --> db`,
 
   "priority-queue": `flowchart LR
-  client[Client] --> router{priority}
+  sender[Service A] --> router{priority label}
   router -->|high| hq[[High Queue]]
-  router -->|normal| nq[[Normal Queue]]
-  hq -.->|drained first| worker[Worker]
-  nq -.->|drained when idle| worker`,
+  router -->|low| lq[[Low Queue]]
+  hq -.-> hw["High Workers (scale up to 10)"]
+  lq -.-> lw["Low Workers (2 always reserved)"]`,
 
   "claim-check": `flowchart LR
   producer[Service A] -->|upload payload| store[(Store)]
@@ -40,11 +47,11 @@ const DIAGRAMS = {
   consumer -->|fetch payload| store`,
 
   "dead-letter-queue": `flowchart LR
-  queue[[Queue]] -.-> worker[Worker]
-  worker --> check{retries left}
-  check -->|yes| queue
-  check -->|no| dlq[[Dead Letter Queue]]
-  dlq -.->|manual review| ops[Operator]`,
+  queue[[Queue]] -.->|deliver| worker[Worker]
+  worker -.->|fails, message not deleted| queue
+  queue -->|receive count hits max| dlq[[Dead Letter Queue]]
+  dlq -.->|message count above 0| alarm[Alarm]
+  alarm -.-> ops[Operator]`,
 
   "idempotency-key": `sequenceDiagram
   participant Client
@@ -58,10 +65,9 @@ const DIAGRAMS = {
   API-->>Client: 201 same result no new charge`,
 
   "valet-key": `flowchart LR
-  client[Client] -->|request upload url| api[API]
-  api -->|signed short lived url| client
-  client -->|uploads bytes direct| store[(Store)]
-  api -.->|no bulk data| store`,
+  client[Client] -->|ask to write file 42| api["API (checks caller)"]
+  api -->|token: file 42 only, write only, expires in 5 min| client
+  client -->|upload bytes with token| store[(Store)]`,
 
   "api-gateway": `flowchart LR
   client[Client] --> gateway[Gateway]
@@ -89,13 +95,19 @@ const DIAGRAMS = {
   ServiceB-->>Gateway: orders
   Gateway-->>Client: one combined response`,
 
-  "cache-aside": `flowchart LR
-  client[Client] --> api[API]
-  api --> hit{in cache}
-  hit -->|yes| cache[(Cache)]
-  hit -->|no| db[(DB)]
-  db -->|fill cache| cache
-  cache --> api`,
+  "cache-aside": `sequenceDiagram
+  participant API
+  participant Cache
+  participant DB
+  Note over API,DB: read
+  API->>Cache: get key user 42
+  Cache-->>API: miss
+  API->>DB: read row 42
+  DB-->>API: row
+  API->>Cache: set key user 42 with expiry
+  Note over API,DB: write
+  API->>DB: update row 42
+  API->>Cache: then delete key user 42`,
 
   "sharding": `flowchart LR
   client[Client] --> api[API]
@@ -195,12 +207,15 @@ const DIAGRAMS = {
   "retry-with-backoff-and-jitter": `sequenceDiagram
   participant Client
   participant ServiceA as Service A
-  Client->>ServiceA: call attempt 1
+  Client->>ServiceA: attempt 1
   ServiceA-->>Client: 503
-  Client->>ServiceA: retry after 1s plus jitter
+  Note over Client: wait random 0 to min(cap, base x 2)
+  Client->>ServiceA: attempt 2
   ServiceA-->>Client: 503
-  Client->>ServiceA: retry after 2s plus jitter
-  ServiceA-->>Client: 200 ok`,
+  Note over Client: wait random 0 to min(cap, base x 4)
+  Client->>ServiceA: attempt 3
+  ServiceA-->>Client: 503
+  Note over Client: max attempts reached, stop and return error`,
 
   "bulkhead": `flowchart LR
   client[Client] --> api[API]
@@ -214,18 +229,23 @@ const DIAGRAMS = {
   api --> p2`,
 
   "rate-limiting": `flowchart LR
-  worker[Worker] --> limiter{token available}
-  limiter -->|yes| api[Downstream API]
-  limiter -->|no| wait[Wait and retry]
-  wait -.-> limiter
-  bucket[(Token Bucket)] -.->|refills| limiter`,
+  svcA[Service A] -->|enqueue all records| queue[[Queue]]
+  queue -.->|20 every 200ms| w1[Worker 1]
+  queue -.->|20 every 200ms| w2[Worker 2]
+  w1 -->|lease locks| locks[(Lock Store)]
+  w2 -->|lease locks| locks
+  w1 -->|send only what locks allow| api[Downstream API]
+  w2 -->|send only what locks allow| api
+  w1 -.->|rejected, requeue after random wait| queue`,
 
   "throttling": `flowchart LR
-  client[Client] --> api[API]
-  api --> check{over quota}
-  check -->|no| svcA[Service A]
-  check -->|yes| reject["429 Too Many Requests"]
-  check -->|soft limit| degraded[Reduced service]`,
+  client[Client] -->|API key| api[API]
+  api -->|count request| counter[(Counter per caller)]
+  api --> quota{caller over limit}
+  quota -->|yes| reject["429 with Retry-After"]
+  quota -->|no| load{in-flight load near cap}
+  load -->|yes, reject a growing share| reject
+  load -->|no| svcA[Service A]`,
 
   "shuffle-sharding": `flowchart LR
   t1[Tenant 1] --> n1[Node 1]
@@ -343,11 +363,16 @@ const DIAGRAMS = {
   participant Client
   participant API
   participant IdP as Identity Provider
-  Client->>API: request protected page
-  API-->>Client: redirect to idp
-  Client->>IdP: sign in
-  IdP-->>Client: signed token
-  Client->>API: request with token
+  Client->>API: request page, no session
+  API-->>Client: redirect to IdP
+  Client->>IdP: sign in with password and second factor
+  IdP-->>Client: redirect back with short code
+  Client->>API: send code
+  API->>IdP: trade code for token
+  IdP-->>API: signed token with user id and roles
+  API-->>Client: session holding token
+  Client->>API: later request with token
+  API->>API: check signature, read roles
   API-->>Client: 200 ok`,
 
   "distributed-tracing": `flowchart LR
