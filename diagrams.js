@@ -262,12 +262,18 @@ const DIAGRAMS = {
   router -->|tenants n to z| api2`,
 
   "geodes": `flowchart LR
-  eu[EU Client] --> geoEU[API EU]
-  us[US Client] --> geoUS[API US]
-  geoEU --> dbEU[(Regional DB)]
-  geoUS --> dbUS[(Regional DB)]
-  dbEU -.->|geo replication| dbUS
-  dbUS -.->|geo replication| dbEU`,
+  eu[EU Client] --> glb[Global Load Balancer]
+  us[US Client] --> glb
+  glb -->|EU users, nearest geode| apiEU
+  glb -->|US users, nearest geode| apiUS
+  glb -.->|US users, if Geode US is down| apiEU
+  subgraph GeodeEU[Geode EU]
+    apiEU[API] -->|reads and writes| dbEU[(DB)]
+  end
+  subgraph GeodeUS[Geode US]
+    apiUS[API] -->|reads and writes| dbUS[(DB)]
+  end
+  dbEU <-.->|replicate writes both ways| dbUS`,
 
   "sidecar": `flowchart LR
   client[Client] --> sc1[Sidecar]
