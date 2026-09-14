@@ -55,6 +55,11 @@ function learnView() {
   return `<a class="back" href="#/">&larr; back</a>${groups}`;
 }
 
+// Link text is the site's domain, like "microsoft.com" for learn.microsoft.com.
+function domainOf(url) {
+  return new URL(url).hostname.split(".").slice(-2).join(".");
+}
+
 function detailView(pattern) {
   return `
     <a class="back" href="#/learn">&larr; all patterns</a>
@@ -65,6 +70,10 @@ function detailView(pattern) {
       <h3>How to implement</h3>
       <p>${esc(pattern.implementation)}</p>
       <div class="diagram" id="diagram"></div>
+      <h3>Learn more</h3>
+      <ul class="links">
+        ${pattern.links.map((url) => `<li><a href="${esc(url)}" target="_blank" rel="noopener">${esc(domainOf(url))}</a></li>`).join("")}
+      </ul>
     </div>`;
 }
 
