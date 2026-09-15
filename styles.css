@@ -92,6 +92,25 @@ h2.category {
   padding-bottom: 0.4rem;
   border-bottom: 1px solid var(--line);
 }
+details.category-group summary {
+  list-style: none;
+  cursor: pointer;
+}
+details.category-group summary::-webkit-details-marker { display: none; }
+details.category-group summary h2.category {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin: 0;
+  padding: 1rem 0;
+}
+details.category-group summary h2.category::after {
+  content: "+";
+  font-size: 1.1rem;
+  line-height: 1;
+}
+details.category-group[open] summary h2.category::after { content: "\2212"; }
+details.category-group summary:hover h2.category { color: var(--accent); }
 ul.patterns {
   list-style: none;
   margin: 0;

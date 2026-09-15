@@ -34,10 +34,14 @@ function splashView() {
     </div>`;
 }
 
+// Category indexes open on the learn page, so returning from a pattern keeps them open.
+const openCategories = new Set();
+
 function learnView() {
   const groups = PATTERN_CATEGORIES.map(
-    (c) => `
-      <h2 class="category">${esc(c.category)}</h2>
+    (c, i) => `
+      <details class="category-group" data-group="${i}"${openCategories.has(i) ? " open" : ""}>
+      <summary><h2 class="category">${esc(c.category)}</h2></summary>
       <ul class="patterns">
         ${c.patterns
           .map(
@@ -50,10 +54,23 @@ function learnView() {
           </li>`
           )
           .join("")}
-      </ul>`
+      </ul>
+      </details>`
   ).join("");
   return `<a class="back" href="#/">&larr; back</a>${groups}`;
 }
+
+// "toggle" does not bubble, so listen in the capture phase.
+app.addEventListener(
+  "toggle",
+  (e) => {
+    if (!e.target.matches("details.category-group")) return;
+    const i = Number(e.target.dataset.group);
+    if (e.target.open) openCategories.add(i);
+    else openCategories.delete(i);
+  },
+  true
+);
 
 // Link text is the site's domain, like "microsoft.com" for learn.microsoft.com.
 function domainOf(url) {
@@ -343,9 +360,18 @@ app.addEventListener("click", (e) => {
   }
 });
 
+// The hash currently shown, and where the learn page was scrolled when it was last left.
+let shownHash = null;
+let learnScrollY = 0;
+
 function render() {
   const hash = location.hash.replace(/^#/, "");
   const patternMatch = hash.match(/^\/pattern\/([a-z0-9-]+)$/);
+  if (shownHash === "/learn") learnScrollY = window.scrollY;
+  // Returning from a pattern, or re-rendering after a theme change, keeps the learn page's scroll.
+  const keepLearnScroll =
+    hash === "/learn" && (shownHash === "/learn" || shownHash?.startsWith("/pattern/"));
+  shownHash = hash;
 
   app.classList.toggle("wide", hash === "/quiz");
 
@@ -360,7 +386,7 @@ function render() {
   } else {
     app.innerHTML = splashView();
   }
-  window.scrollTo(0, 0);
+  window.scrollTo(0, keepLearnScroll ? learnScrollY : 0);
 }
 
 window.addEventListener("hashchange", () => {
