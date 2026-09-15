@@ -542,7 +542,7 @@ const SCENARIOS = [
   },
   {
     id: "compensating-transaction-4",
-    text: "An online gaming store runs a bundle purchase as a five-step process: charge the card, grant the base game, grant the two downloadable add-ons, credit 500 in-game currency, and post the achievement. When granting the second add-on fails because the entitlement service rejects a region restriction, the charge has already settled and the player already owns the base game and 500 currency they may have spent. Restoring the old state by force is wrong, because the currency balance has changed since then and other purchases touched it. The team wants the already-finished steps unwound automatically once the forward path gives up, using actions that respect what the balance is now rather than overwriting it.",
+    text: "An online gaming store runs a bundle purchase as a five-step process: charge the card, grant the base game, credit 500 in-game currency, grant the two downloadable add-ons, and post the achievement. When granting the second add-on fails because the entitlement service rejects a region restriction, the charge has already settled and the player already owns the base game and 500 currency they may have spent. Restoring the old state by force is wrong, because the currency balance has changed since then and other purchases touched it. The team wants the already-finished steps unwound automatically once the forward path gives up, using actions that respect what the balance is now rather than overwriting it.",
     answers: ["compensating-transaction"],
   },
   {
