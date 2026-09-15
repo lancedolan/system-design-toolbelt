@@ -31,6 +31,7 @@ function splashView() {
         <a class="cta" href="#/learn">learn</a>
         <a class="cta" href="#/quiz">quiz</a>
       </div>
+      <a class="repo-link" href="https://github.com/lancedolan/system-design-toolbelt">view source on GitHub</a>
     </div>`;
 }
 

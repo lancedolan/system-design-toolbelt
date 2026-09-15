@@ -75,6 +75,10 @@ a { color: var(--accent); }
   cursor: pointer;
 }
 .cta:hover { background: var(--fg); color: var(--bg); }
+.repo-link {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
 
 /* Learn list */
 .back {
