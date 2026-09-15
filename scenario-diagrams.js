@@ -602,6 +602,107 @@ const SCENARIO_DIAGRAMS = {
   xfer --> cache
   cache --> core[("Core banking store")]`,
 
+  "circuit-breaker-1": `flowchart TD
+  shopper["Shoppers"] -->|"purchase"| lb["Load balancer"]
+  lb --> checkout["Checkout service · web pool of 200 threads, all waiting"]
+  checkout -->|"1,200 fraud score calls/s · 5 s timeout · every call hangs in a 25 min outage"| fraud["Fraud scoring vendor API"]
+  lb -->|"order history"| checkout
+  lb -->|"address lookup"| checkout
+  checkout --> orders[("Orders DB")]`,
+
+  "circuit-breaker-2": `flowchart TD
+  apps["Viewer apps"] -->|"open home screen"| home["Home screen API · p99 went from 120 ms to 9 s"]
+  home -->|"8,000 calls/s · each holds 1 of 500 pool connections · 3 s to fail"| recs["Recommendations service · out of memory, 100 percent errors for 18 min"]
+  home -->|"rest of the page"| cache[("Page cache · healthy")]
+  recs --> pods["Recommendations pods · crash-looping under constant traffic"]
+  recs --> model[("Recommendation model store")]`,
+
+  "circuit-breaker-3": `flowchart TD
+  meters["400,000 smart meters"] --> lb["Load balancer · pulls nodes that fail health checks"]
+  lb --> ingest["Ingest nodes · device-facing HTTP endpoint"]
+  lb -.->|"health checks time out"| ingest
+  ingest --> workers["Ingest worker pool · empties during compaction"]
+  workers -->|"every write attempted · blocks for the 10 s timeout"| tsdb[("Time series DB · compaction 10 to 30 min weekly, rejects writes")]
+  tsdb --> dash["Dashboards and billing"]`,
+
+  "circuit-breaker-4": `flowchart TD
+  app["Bank mobile app"] --> api["Mobile API · p99 over 20 s on every endpoint"]
+  api -->|"balance calls keep coming in the nightly window"| gw["Mainframe gateway · 60 concurrent sessions, all used up"]
+  api -->|"transfers"| gw
+  api -->|"bill pay"| gw
+  gw --> bal["Mainframe balance service · errors for 40 min nightly"]
+  gw --> core["Mainframe transfer and bill pay programs"]`,
+
+  "circuit-breaker-5": `flowchart TD
+  pub["Publisher page"] -->|"ad request · must answer under 100 ms"| ads["Ad server · misses the deadline, loses bids from healthy exchanges"]
+  ads -->|"parallel bid request"| exA["Exchange A · healthy"]
+  ads -->|"parallel bid request"| exB["Exchange B · healthy"]
+  ads -->|"30,000 calls/s · waits the full 100 ms · sockets held"| exC["Exchange C · dark 5 to 15 min, accepts TCP, never responds"]
+  ads --> floors[("Campaign and floor price cache")]`,
+
+  "retry-with-backoff-and-jitter-1": `flowchart TD
+  phones["60,000 driver phones · location update every 4 s"] --> lb["Load balancer"]
+  lb --> n1["Ingest API node 1 · restarting"]
+  lb --> n2["Ingest API nodes 2 to N · fail under the spike"]
+  phones -.->|"connection error, all retry after exactly 1 s · 60,000 requests in one 50 ms slice"| lb
+  n2 --> stream[["Location stream"]]
+  stream --> db[("Driver location store")]`,
+
+  "retry-with-backoff-and-jitter-2": `flowchart TD
+  sched["Nightly scheduler"] --> job["Batch job · 2 million rows · 3 h instead of 40 min"]
+  job --> workers["200 workers"]
+  workers -->|"writes · unique key per row"| kv[("Managed key-value store · 0.3 percent brief capacity errors")]
+  workers -.->|"retry at once in a tight loop · 5x request spike"| kv
+  kv --> dash["Store dashboard · sawtooth of errors and spikes"]
+  src[("Source data warehouse")] --> job`,
+
+  "retry-with-backoff-and-jitter-3": `flowchart TD
+  merchants["8,000 merchant servers · payments SDK"] -->|"POST authorize · unique operation ID"| lb["Load balancer · 3 s network blip in one zone"]
+  lb --> auth["Authorization endpoint · sized for 5,000 req/s · degraded 11 min"]
+  merchants -.->|"re-send at once, then again 100 ms later · 400,000 requests in 2 s"| lb
+  auth -->|"dedupe by operation ID"| dedupe[("Operation ID store")]
+  auth --> networks["Card networks"]`,
+
+  "retry-with-backoff-and-jitter-4": `flowchart TD
+  players["250,000 game clients"] -->|"websocket"| gw["Websocket gateway · runs out of file descriptors"]
+  gw --> mm["Matchmaking service · 2 s deploy drops all sockets"]
+  players -.->|"reconnect the moment the socket closes · 250,000 handshakes in 1 s"| gw
+  gw -.->|"rejects most handshakes, rejected clients reconnect in lockstep"| players
+  mm --> pool[("Player queue store")]`,
+
+  "retry-with-backoff-and-jitter-5": `flowchart TD
+  upper["Calling layer · retries the whole batch 3 times"] -->|"sync batch"| sync["Sync service · 50 parallel readers"]
+  sync -->|"reads · about 400 requests normally"| fhir["Vendor FHIR API · 503 on 1 in 200 calls"]
+  sync -.->|"retry each 503 at once, up to 10 times, no wait"| fhir
+  fhir -.->|"90,000 requests in a 10 s hiccup · API key blocked 1 h"| sync
+  sync --> records[("Hospital records DB")]`,
+
+  "bulkhead-1": `flowchart TD
+  shopper["Shoppers"] -->|"purchase, including gift cards"| web["Checkout page"]
+  web --> checkout["Checkout service · page returns 500s"]
+  checkout --> pool["One shared pool · 200 worker threads · all 200 parked on tax"]
+  pool -->|"fraud check"| fraud["Fraud scoring vendor · gets no threads"]
+  pool -->|"tax lookup"| tax["Sales tax vendor · 90 ms average slowed to 9 s, no errors"]
+  pool -->|"address check"| addr["Address cleanup vendor · gets no threads"]
+  checkout --> orders[("Orders DB")]
+  checkout --> payments["Payment processor"]`,
+
+  "bulkhead-2": `flowchart TD
+  clin["Clinicians · chart lookups need under 400 ms"] --> ehr["Records app"]
+  ehr -->|"chart lookups queue and time out for 20 min"| pool["One connection pool · 60 connections"]
+  export["Research bulk export · moved to 7 am by mistake"] -->|"holds 55 long-running connections"| pool
+  pool --> db[("Records DB · CPU headroom the whole time")]
+  research["Research team"] --> export
+  ehr --> audit[("Audit log")]`,
+
+  "bulkhead-3": `flowchart TD
+  exchange["Ad exchanges"] -->|"bid callback · must answer in 80 ms"| lb["Load balancer"]
+  adv["Advertisers"] -->|"14-month report across 400 campaigns"| lb
+  lb --> proc["One server process · 64 request handlers · one 8 GB heap · report holds 60 handlers"]
+  proc -->|"bid lookups"| budget[("Campaign budget cache")]
+  proc -->|"scans months of data"| warehouse[("Reporting data store")]
+  proc -.->|"bid callbacks time out · about 3 million bids lost"| exchange`,
+
   "bulkhead-4": `flowchart TD
   biz["Business customers · statements promised within 5 s by contract"] --> api["Statement generation service"]
   retail["Retail customers · 95 percent of volume · no delivery promise"] --> api
@@ -1108,6 +1209,259 @@ const SCENARIO_DIAGRAMS = {
   sheet -->|"cancel appraisal by hand"| appraisal
   flow --> loanfile[("Loan file DB")]
   officer --> uploads["Document upload portal"]`,
+  "bulkhead-5": `flowchart TD
+  trucks["12,000 trucks · device messages"] -->|"5 message kinds"| ingest["Device gateway"]
+  ingest --> queue[["One queue · GPS, temperature, door, check-in, firmware confirmations"]]
+  queue -.->|"any consumer takes any kind"| group["One consumer group · 24 processes · all 24 stuck on firmware"]
+  group -->|"firmware handler hangs 30 s per message"| blob[("Blob storage")]
+  group -->|"GPS pings 45 min behind"| tracking["Live tracking"]
+  group --> telemetry[("Telemetry DB")]
+  dispatch["Dispatchers"] --> tracking`,
+
+  "rate-limiting-1": `flowchart TD
+  warehouse["Analytics warehouse"] --> events[("Day's conversion events")]
+  sched["Nightly scheduler"] --> job["Nightly upload job · 200 parallel workers · about 4,000 writes/s"]
+  events --> job
+  job -->|"push as fast as possible · back off per failed call"| api["Ad partner API · 500 writes/s per account"]
+  api -.->|"HTTP 429 on 68 percent of calls"| job
+  job -.->|"resend rejected records · run takes 5 h, was 2.5 h"| api`,
+
+  "rate-limiting-2": `flowchart TD
+  appts[("Day's appointments · 90,000 checks")] --> batch["6 am batch job"]
+  batch --> pool["Worker pool · fires as threads free up · about 300 requests/s"]
+  pool -->|"eligibility checks at 300/s"| vendor["Insurance eligibility vendor · contract allows 20 requests/s per key"]
+  vendor -.->|"rejects the excess · written warning of key suspension"| pool
+  pool --> results[("Eligibility results")]
+  staff["Front desk staff"] --> app["Clinic scheduling app"]
+  app --> results`,
+
+  "rate-limiting-3": `flowchart TD
+  cron["Hourly timer · wakes at the top of the hour"] --> poller["Tracking poller"]
+  shipments[("Open shipments")] --> poller
+  poller -->|"all 10,000 calls in the first 4 min"| carrier["Carrier tracking API · 10,000 calls per hour per customer · fixed hourly window"]
+  carrier -.->|"every call refused for the next 56 min"| poller
+  poller --> status[("Tracking status DB · 58 min stale by 2:59 pm")]
+  customers["Customers and support"] --> portal["Tracking page"]
+  portal --> status`,
+
+  "rate-limiting-4": `flowchart TD
+  file[("Nightly file · 10 million transaction rows")] --> loader["Loader · writes as fast as it reads"]
+  loader -->|"far above 2,000 rows/s"| docdb[("Document DB · 20,000 units/s · 10 units per row · 2,000 rows/s")]
+  docdb -.->|"most writes refused"| loader
+  loader -.->|"resend · each row sent about 3 times"| docdb
+  loader --> logs[("Error logs · 40 GB a night")]
+  app["Fintech app · reads"] --> docdb`,
+
+  "rate-limiting-5": `flowchart TD
+  players[("2 million player push tokens")] --> sender["Push sender · 50 connections · sends until refused"]
+  launch["Launch-day campaign"] --> sender
+  sender -->|"pushes nonstop"| vendor["Push vendor · plan allows 600 messages/s"]
+  vendor -.->|"about 40 percent rejected"| sender
+  sender -.->|"resends · nearly 3 times the needed volume"| vendor
+  vendor --> devices["Player phones"]`,
+
+  "throttling-1": `flowchart TD
+  tenants["About 900 tenants · 3 to 8 requests/s each"] --> lb["Load balancer"]
+  script["One tenant's script · 150 requests/s for 40 min"] --> lb
+  lb --> api["Analytics API servers · CPU at 96%"]
+  api --> query["Query engine"]
+  query --> store[("Analytics store")]
+  api -.->|"p99 goes from 120 ms to 4.2 s for every tenant · 500 ms promise broken"| tenants
+  scaler["Autoscaler · adds servers after about 6 min"] -.-> api`,
+
+  "throttling-2": `flowchart TD
+  viewers["2.1 million concurrent viewers · capacity sized for 1.2 million"] --> edge["Delivery edge · stream stutters for everyone"]
+  edge -->|"full quality video"| origin["Stream origin"]
+  origin --> enc["Encoding fleet · no hardware can be added mid-match"]
+  viewers --> app["Player backend"]
+  app --> recs["Personalized recommendation panel"]
+  app --> stats["Live stats overlay"]
+  recs -->|"with stats, about 18% of backend capacity"| shared[("Shared backend cluster")]
+  stats --> shared`,
+
+  "throttling-3": `flowchart TD
+  riders["Transit app riders"] --> lb["Load balancer"]
+  scrapers["2 scrapers · 22,000 requests/s combined · unique query strings"] --> lb
+  lb --> cache[("Response cache · most scraper calls miss")]
+  cache -->|"miss"| api["Open-data API servers · sized for 4,000 requests/s · saturated"]
+  api --> feed[("Bus arrivals DB")]
+  api -.->|"timeouts"| riders
+  gps["Bus GPS feed"] --> feed`,
+
+  "throttling-4": `flowchart TD
+  players["400,000 players · all try within 2 min at 6pm"] --> lb["Load balancer"]
+  lb -->|"every request accepted"| queue[["Login queue · no limit"]]
+  queue --> auth["Auth servers · 90,000 sign-ins/min max · thrashing"]
+  auth -->|"full password hash check, even for refusals"| users[("Account DB")]
+  auth -->|"session token"| sessions[("Session store")]
+  auth -.->|"average sign-in 90 s · nobody gets in"| players
+  players -.->|"after login"| game["Game servers"]`,
+
+  "throttling-5": `flowchart TD
+  meters["2 million meters · firmware now reports every 10 s instead of every 5 min"] -->|"200,000 messages/s · was 6,600"| gw["Device gateway"]
+  gw --> ingest["Ingest tier · handles 25,000 messages/s · overloaded"]
+  ingest -->|"200 ms write promise missed"| tsdb[("Time-series DB")]
+  tsdb --> reports["Usage and billing reports"]`,
+
+  "shuffle-sharding-1": `flowchart TD
+  customers["8,999 other customers"] --> lb["Load balancer · spreads every customer across all 26 nodes"]
+  bad["One customer · request pattern pegs node CPU"] --> lb
+  lb -->|"bad traffic"| n1["Node 1 · CPU pegged"]
+  lb -->|"bad traffic"| n2["Node 2 · CPU pegged"]
+  lb -->|"bad traffic"| n3["Nodes 3 to 26 · CPU pegged"]
+  n1 --> db[("Customer data store")]
+  n2 --> db
+  n3 --> db
+  lb -.->|"errors for all 9,000 customers"| customers`,
+
+  "shuffle-sharding-2": `flowchart TD
+  platform["Commerce platform · events for 12,000 merchants"] --> queue[["Shared delivery queue · any sender takes any merchant"]]
+  queue --> s1["Sender 1"]
+  queue --> s2["Sender 2"]
+  queue --> s3["Senders 3 to 40"]
+  s1 -->|"waits 30 s timeout"| slow["One merchant's endpoint · holds every connection 30 s"]
+  s2 -->|"waits 30 s timeout"| slow
+  s3 -->|"waits 30 s timeout"| slow
+  s3 -.->|"every merchant's webhooks 20 min late"| others["Other merchants' endpoints"]
+  s1 --> log[("Delivery attempt log")]`,
+
+  "shuffle-sharding-3": `flowchart TD
+  clients["60,000 API clients"] --> lb["Load balancer · any request can go to any of 100 nodes"]
+  bad["One client · malformed request sent in a loop"] --> lb
+  lb -->|"attempt 1"| g1["Gateway node 1 · crashed"]
+  lb -->|"retry lands on a new node"| g2["Gateway node 2 · crashed"]
+  lb -->|"more retries, new node each time"| g3["Gateway nodes 3 to 100 · most crashed in under 3 min"]
+  g1 --> pay["Payment services"]
+  g2 --> pay
+  g3 --> pay
+  pay --> ledger[("Ledger DB")]
+  lb -.->|"all 60,000 clients down"| clients`,
+
+  "shuffle-sharding-4": `flowchart TD
+  guilds["30,000 guilds · chat clients"] --> lb["Chat load balancer · spreads every guild across all 64 relays"]
+  bot["One guild's bot · 5,000 messages/s"] --> lb
+  lb -->|"bot traffic"| r1["Relay 1 · saturated"]
+  lb -->|"bot traffic"| r2["Relay 2 · saturated"]
+  lb -->|"bot traffic"| r3["Relays 3 to 64 · saturated"]
+  r1 --> hist[("Chat history store")]
+  r2 --> hist
+  r3 --> hist
+  lb -.->|"chat down for all 30,000 guilds for 11 min"| guilds`,
+
+  "shuffle-sharding-5": `flowchart TD
+  fleets["10,000 customer device fleets"] --> ep["Broker endpoint · any device can connect to any of 30 brokers"]
+  storm["One customer's 40,000 devices · reconnect loop after bad certificate rollout"] --> ep
+  ep -->|"reconnects"| b1["Broker 1 · overloaded"]
+  ep -->|"reconnects"| b2["Broker 2 · overloaded"]
+  ep -->|"reconnects"| b3["Broker 3 · overloaded"]
+  ep -->|"reconnects"| b4["Brokers 4 to 30 · overloaded"]
+  b1 --> tel[("Telemetry store")]
+  b2 --> tel
+  b3 --> tel
+  b4 --> tel
+  ep -.->|"every fleet's telemetry stalled for 30 min"| fleets`,
+
+  "leader-election-1": `flowchart TD
+  meters["90,000 smart water meters"] --> ingest["Reading ingest"]
+  ingest --> readings[("Readings table")]
+  asg["Autoscaler"] --> c1["Rollup container 1 · 60 s sweep timer"]
+  asg --> c2["Rollup container 2 · 60 s sweep timer"]
+  asg --> c12["Rollup containers 3 to 12 · same 60 s sweep timer"]
+  c1 -->|"sweeps new readings"| readings
+  c2 -->|"sweeps the same readings"| readings
+  c12 -->|"sweep the same readings"| readings
+  c1 -->|"writes hourly totals"| totals[("Hourly totals table · each total written 12 times")]
+  c2 -->|"writes the same totals again"| totals
+  c12 -->|"write the same totals again"| totals
+  billing["Billing app"] --> totals`,
+
+  "leader-election-2": `flowchart TD
+  clients["Banking apps"] --> lb["Load balancer"]
+  lb --> s0["Account service copy 0 · crashed Tuesday night"]
+  lb --> s1["Account service copies 1 to 5"]
+  s0 -->|"daily interest job · 2.1 million accounts · nothing posts while copy 0 is down"| db[("Accounts DB")]
+  s1 -->|"requests only"| db
+  cfg["Deploy config · env variable turns the job on only for copy 0"] -.-> s0
+  cfg -.-> s1`,
+
+  "leader-election-3": `flowchart TD
+  players["Players waiting for a match"] --> api["Matchmaking API"]
+  api --> i1["Matchmaking instance 1 · sweeps every 2 s"]
+  api --> i2["Matchmaking instances 2 to 8 · each sweeps every 2 s"]
+  i1 -->|"reads the whole waiting pool"| pool[("Waiting player pool")]
+  i2 -->|"read the same pool at the same instant"| pool
+  i1 -->|"assigns 5-player matches"| gs["Game server fleet"]
+  i2 -->|"assign the same player to another match"| gs
+  gs --> clients["Game clients · crash when a player is in two matches"]`,
+
+  "leader-election-4": `flowchart TD
+  c1["Consumer instance 1"] -->|"opens feed session"| carrier["Carrier scan event feed · one open session per account"]
+  c2["Consumer instances 2 to 5"] -->|"open sessions with the same credentials · kick each other off"| carrier
+  carrier -.->|"30 s gaps of lost scan events all day"| c1
+  c1 --> events[("Package scan events DB")]
+  c2 --> events
+  events --> tracking["Tracking page and API"]`,
+
+  "leader-election-5": `flowchart TD
+  rA["Rebalancer replica · zone A"] -->|"reads queue depths"| metrics[("Fleet queue depth metrics")]
+  rB["Rebalancer replica · zone B"] -->|"reads queue depths"| metrics
+  rC["2 rebalancer replicas · zone C"] -->|"read queue depths"| metrics
+  rA -->|"move encoder 7 to EU"| ctl["Encoder control API"]
+  rB -->|"move encoder 7 to US · conflicts"| ctl
+  rC -->|"more reassignment commands"| ctl
+  ctl --> enc["Encoder fleet · flaps between regions · 6 min extra encode delay"]
+  enc --> metrics`,
+
+  "scheduler-agent-supervisor-1": `flowchart TD
+  portal["Provider claim submissions · 4,000 a day"] --> api["Claims API"]
+  api -->|"writes claim row"| db[("Claims DB")]
+  api -->|"enqueue claim"| q[["Claim work queue"]]
+  q --> worker["Claim worker · runs all 6 steps in one process · sometimes crashes"]
+  worker -->|"step 2 eligibility check · sometimes hangs"| elig["Eligibility system"]
+  worker -->|"step 5 payment authorization · sometimes hangs"| pay["Payment authorization system"]
+  worker -->|"sets status processing"| db
+  worker -->|"step 3 provider lookup"| prov[("Provider directory")]
+  eng["Engineer · runs UPDATE statements by hand 3 weeks later"] -->|"about 60 claims a day stuck in processing"| db`,
+
+  "scheduler-agent-supervisor-2": `flowchart TD
+  app["Retail store activation app"] --> api["Activation API"]
+  api -->|"activation row marked in progress"| db[("Activations DB")]
+  api --> worker["Activation worker · 90 s timeout, dies on a slow vendor call"]
+  worker -->|"1. reserve number"| num["Number reservation vendor"]
+  worker -->|"2. register SIM"| sim["SIM registration vendor"]
+  worker -->|"3. set up billing account"| bill["Billing vendor"]
+  worker -->|"4. provision network"| net["Network provisioning vendor"]
+  worker -.->|"dies · row left in progress with no owner · about 3 percent"| db
+  support["Support team · morning spreadsheet of stuck line numbers"] -->|"replay by hand"| api
+  undo["Undo commands for each step · written, never run automatically"] -.-> worker`,
+
+  "scheduler-agent-supervisor-3": `flowchart TD
+  signup["Customer signup"] --> api["Provisioning API"]
+  api --> wf["Workflow process · 9 steps · 12 to 20 min"]
+  wf -->|"reserve subdomain"| dns["DNS provider"]
+  wf -->|"issue certificate"| ca["Certificate authority"]
+  wf -->|"create containers"| cp["Container platform"]
+  wf -->|"create subscription"| billing["Billing system"]
+  wf -->|"run state"| db[("Environments DB · 140 half-built, some 5 months old")]
+  drain["Node drain"] -.->|"terminates the process mid-run · run just stops"| wf`,
+
+  "scheduler-agent-supervisor-4": `flowchart TD
+  cron["Nightly payout batch"] --> worker["Payout worker · runs 5 steps · redeployed mid-batch"]
+  worker -->|"steps 1 and 2 · compute and hold balance"| ledger[("Seller balance ledger")]
+  worker -->|"step 3 transfer · usually 800 ms, hung over 10 min twice"| bank["Bank transfer API"]
+  worker -->|"state SENDING · no owner, no timeout"| db[("Payouts DB · 312 rows stuck last month")]
+  worker -->|"steps 4 and 5 · mark paid, email seller"| notify["Seller notification service"]
+  deploy["Deploy pipeline"] -.->|"kills worker mid-batch"| worker
+  db --> report["Finance payout report"]`,
+
+  "scheduler-agent-supervisor-5": `flowchart TD
+  am["Account manager"] -->|"launch campaign"| api["Campaign API"]
+  api --> worker["Launch worker · recycled after exchange timeouts"]
+  worker -->|"steps 1 to 5 · create campaign on each exchange"| ex["5 ad exchange APIs · calls sometimes time out"]
+  worker -->|"step 6 · approve creative"| creative["Creative approval service"]
+  worker -->|"step 7 · set budget"| budget["Budget service"]
+  worker --> db[("Campaigns DB · 1 in 30 launches live on 3 exchanges, missing on 2")]
+  am -.->|"spots half-applied launches by eye, re-runs them, sometimes creates duplicates"| api`,
 
 };
 
@@ -2480,6 +2834,261 @@ const SOLVED_SCENARIO_DIAGRAMS = {
   linkStyle 8 stroke:#16a34a,stroke-width:3px;
   linkStyle 2 stroke:#dc2626,stroke-width:3px;`,
 
+  "circuit-breaker-1": `flowchart TD
+  shopper["Shoppers"] -->|"purchase"| lb["Load balancer"]
+  lb --> checkout["Checkout service · web pool of 200 threads, free for other endpoints"]
+  checkout -->|"every fraud call"| breaker["Fraud circuit breaker · closed, open, half-open · opens when failures pass the limit in a time window"]
+  breaker -->|"closed: call goes through · 5 s timeout"| fraud["Fraud scoring vendor API"]
+  breaker -.->|"open: low-risk default returned right away, no thread held · 30 s timer"| checkout
+  breaker -.->|"half-open after timer: a few test calls, close if they succeed, open again if one fails"| fraud
+  checkout -.->|"1,200 calls/s straight at a dead vendor"| fraud
+  lb -->|"order history"| checkout
+  lb -->|"address lookup"| checkout
+  checkout --> orders[("Orders DB")]
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class breaker,checkout added;
+  linkStyle 2 stroke:#16a34a,stroke-width:3px;
+  linkStyle 3 stroke:#16a34a,stroke-width:3px;
+  linkStyle 4 stroke:#16a34a,stroke-width:3px;
+  linkStyle 5 stroke:#16a34a,stroke-width:3px;
+  linkStyle 6 stroke:#dc2626,stroke-width:3px;`,
+
+  "circuit-breaker-2": `flowchart TD
+  apps["Viewer apps"] -->|"open home screen"| home["Home screen API"]
+  home -->|"rest of the page"| cache[("Page cache · healthy")]
+  recs["Recommendations service · out of memory"] --> pods["Recommendations pods · restart with no traffic while the breaker is open"]
+  recs --> model[("Recommendation model store")]
+  home -->|"every recommendations call"| breaker["Recommendations circuit breaker · closed, open, half-open · stays open 60 s"]
+  breaker -->|"closed: call goes through"| recs
+  breaker -.->|"open: fail right away, no pool connection used"| generic[("Cached generic row list")]
+  generic -.->|"served immediately"| home
+  breaker -.->|"half-open after 60 s: a few test calls, close if they succeed"| recs
+  home -.->|"8,000 direct calls/s · 3 s each to fail"| recs
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class breaker,generic,pods added;
+  linkStyle 4 stroke:#16a34a,stroke-width:3px;
+  linkStyle 5 stroke:#16a34a,stroke-width:3px;
+  linkStyle 6 stroke:#16a34a,stroke-width:3px;
+  linkStyle 7 stroke:#16a34a,stroke-width:3px;
+  linkStyle 8 stroke:#16a34a,stroke-width:3px;
+  linkStyle 9 stroke:#dc2626,stroke-width:3px;`,
+
+  "circuit-breaker-3": `flowchart TD
+  meters["400,000 smart meters"] --> lb["Load balancer"]
+  lb --> ingest["Ingest nodes · device-facing HTTP endpoint"]
+  lb -.->|"health checks answered"| ingest
+  ingest --> workers["Ingest worker pool · stays free during compaction"]
+  tsdb[("Time series DB · compaction 10 to 30 min weekly")] --> dash["Dashboards and billing"]
+  workers -->|"each write"| breaker["Write circuit breaker · closed, open, half-open · opens when write failures pass the limit · 30 s timer"]
+  breaker -->|"closed: write with 10 s timeout"| tsdb
+  breaker -.->|"open: skip the network, write to local disk right away"| spool[("Local disk spool")]
+  breaker -.->|"half-open after timer: a few test writes, close if they succeed"| tsdb
+  spool -.->|"replay after the breaker closes"| tsdb
+  workers -.->|"doomed write, blocks 10 s"| tsdb
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class breaker,spool,workers added;
+  linkStyle 2 stroke:#16a34a,stroke-width:3px;
+  linkStyle 5 stroke:#16a34a,stroke-width:3px;
+  linkStyle 6 stroke:#16a34a,stroke-width:3px;
+  linkStyle 7 stroke:#16a34a,stroke-width:3px;
+  linkStyle 8 stroke:#16a34a,stroke-width:3px;
+  linkStyle 9 stroke:#16a34a,stroke-width:3px;
+  linkStyle 10 stroke:#dc2626,stroke-width:3px;`,
+
+  "circuit-breaker-4": `flowchart TD
+  app["Bank mobile app"] --> api["Mobile API"]
+  api -->|"transfers"| gw["Mainframe gateway · 60 concurrent sessions"]
+  api -->|"bill pay"| gw
+  gw --> bal["Mainframe balance service · errors for 40 min nightly"]
+  gw --> core["Mainframe transfer and bill pay programs"]
+  api -->|"balance calls"| breaker["Balance circuit breaker · closed, open, half-open · 5 min timer"]
+  breaker -->|"closed: call uses a session"| gw
+  breaker -.->|"open: balance unavailable right away, no session used"| api
+  breaker -.->|"half-open after timer: one test call, close if it succeeds"| gw
+  api -.->|"doomed balance calls holding sessions"| gw
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class breaker added;
+  linkStyle 5 stroke:#16a34a,stroke-width:3px;
+  linkStyle 6 stroke:#16a34a,stroke-width:3px;
+  linkStyle 7 stroke:#16a34a,stroke-width:3px;
+  linkStyle 8 stroke:#16a34a,stroke-width:3px;
+  linkStyle 9 stroke:#dc2626,stroke-width:3px;`,
+
+  "circuit-breaker-5": `flowchart TD
+  pub["Publisher page"] -->|"ad request · must answer under 100 ms"| ads["Ad server · answers in time with bids from A and B"]
+  ads -->|"parallel bid request"| exA["Exchange A · healthy"]
+  ads -->|"parallel bid request"| exB["Exchange B · healthy"]
+  ads --> floors[("Campaign and floor price cache")]
+  ads -->|"Exchange C calls"| breaker["Circuit breaker, one per exchange, shown for C · opens when timeouts pass the limit · 60 s timer"]
+  breaker -->|"closed: bid request"| exC["Exchange C · dark 5 to 15 min"]
+  breaker -.->|"open: skip right away, 0 ms spent"| ads
+  breaker -.->|"half-open after timer: a few test requests, close if they answer"| exC
+  ads -.->|"30,000 calls/s each waiting 100 ms"| exC
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class breaker,ads added;
+  linkStyle 4 stroke:#16a34a,stroke-width:3px;
+  linkStyle 5 stroke:#16a34a,stroke-width:3px;
+  linkStyle 6 stroke:#16a34a,stroke-width:3px;
+  linkStyle 7 stroke:#16a34a,stroke-width:3px;
+  linkStyle 8 stroke:#dc2626,stroke-width:3px;`,
+
+  "retry-with-backoff-and-jitter-1": `flowchart TD
+  phones["60,000 driver phones · location update every 4 s"] --> lb["Load balancer"]
+  lb --> n1["Ingest API node 1 · restarting"]
+  lb --> n2["Ingest API nodes 2 to N"]
+  n2 --> stream[["Location stream"]]
+  stream --> db[("Driver location store")]
+  phones -->|"on connection error"| policy["Retry policy in the app · base 500 ms, cap 8 s, max 4 attempts"]
+  policy -.->|"wait random 0 to min(8 s, 500 ms x 2 to the attempt) · retries spread over seconds"| lb
+  phones -.->|"all retry after exactly 1 s"| lb
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class policy added;
+  linkStyle 5 stroke:#16a34a,stroke-width:3px;
+  linkStyle 6 stroke:#16a34a,stroke-width:3px;
+  linkStyle 7 stroke:#dc2626,stroke-width:3px;`,
+
+  "retry-with-backoff-and-jitter-2": `flowchart TD
+  sched["Nightly scheduler"] --> job["Batch job · 2 million rows"]
+  job --> workers["200 workers"]
+  workers -->|"writes · unique key per row, safe to repeat"| kv[("Managed key-value store · 0.3 percent brief capacity errors")]
+  kv --> dash["Store dashboard"]
+  src[("Source data warehouse")] --> job
+  workers -->|"on capacity error"| policy["Retry policy per worker · base 50 ms, cap 2 s, max 5 attempts"]
+  policy -.->|"wait random 0 to min(cap, base x 2 to the attempt), then write again"| kv
+  policy -.->|"out of attempts, record the row"| failed[("Failed row list")]
+  workers -.->|"tight loop retries"| kv
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class policy,failed added;
+  linkStyle 5 stroke:#16a34a,stroke-width:3px;
+  linkStyle 6 stroke:#16a34a,stroke-width:3px;
+  linkStyle 7 stroke:#16a34a,stroke-width:3px;
+  linkStyle 8 stroke:#dc2626,stroke-width:3px;`,
+
+  "retry-with-backoff-and-jitter-3": `flowchart TD
+  merchants["8,000 merchant servers · payments SDK"] -->|"POST authorize · unique operation ID"| lb["Load balancer · 3 s network blip in one zone"]
+  lb --> auth["Authorization endpoint · sized for 5,000 req/s"]
+  auth -->|"dedupe by operation ID"| dedupe[("Operation ID store")]
+  auth --> networks["Card networks"]
+  merchants -->|"on failure"| policy["SDK retry policy · base 200 ms, cap 10 s, max 5 attempts"]
+  policy -.->|"wait random 0 to min(cap, base x 2 to the attempt), resend same operation ID"| lb
+  merchants -.->|"instant re-send, then again after 100 ms"| lb
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class policy added;
+  linkStyle 4 stroke:#16a34a,stroke-width:3px;
+  linkStyle 5 stroke:#16a34a,stroke-width:3px;
+  linkStyle 6 stroke:#dc2626,stroke-width:3px;`,
+
+  "retry-with-backoff-and-jitter-4": `flowchart TD
+  players["250,000 game clients"] -->|"websocket"| gw["Websocket gateway · handshakes arrive spread out"]
+  gw --> mm["Matchmaking service · 2 s deploy drops all sockets"]
+  gw -.->|"rejects handshakes over capacity"| players
+  mm --> pool[("Player queue store")]
+  players -->|"on socket close or rejection"| policy["Reconnect policy in the client · base 1 s, cap 30 s, max 10 attempts"]
+  policy -.->|"wait random 0 to min(cap, base x 2 to the attempt), longer after each rejection"| gw
+  policy -.->|"out of attempts"| button["Reconnect button in the client"]
+  players -.->|"instant reconnect in lockstep"| gw
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class policy,button,gw added;
+  linkStyle 4 stroke:#16a34a,stroke-width:3px;
+  linkStyle 5 stroke:#16a34a,stroke-width:3px;
+  linkStyle 6 stroke:#16a34a,stroke-width:3px;
+  linkStyle 7 stroke:#dc2626,stroke-width:3px;`,
+
+  "retry-with-backoff-and-jitter-5": `flowchart TD
+  upper["Calling layer · no retries, reports failed records"] -->|"sync batch"| sync["Sync service · 50 parallel readers"]
+  sync -->|"reads · about 400 requests normally"| fhir["Vendor FHIR API · 503 on 1 in 200 calls"]
+  sync --> records[("Hospital records DB")]
+  sync -->|"on 503"| policy["Reader retry policy · the only layer that retries · base 200 ms, cap 5 s, max 4 attempts"]
+  policy -.->|"wait random 0 to min(cap, base x 2 to the attempt)"| fhir
+  policy -.->|"out of attempts, mark record for the next sync"| failed[("Failed read list")]
+  sync -.->|"10 instant retries per 503"| fhir
+  upper -.->|"whole batch retried 3 times"| sync
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class policy,failed,upper added;
+  linkStyle 3 stroke:#16a34a,stroke-width:3px;
+  linkStyle 4 stroke:#16a34a,stroke-width:3px;
+  linkStyle 5 stroke:#16a34a,stroke-width:3px;
+  linkStyle 6 stroke:#dc2626,stroke-width:3px;
+  linkStyle 7 stroke:#dc2626,stroke-width:3px;`,
+
+  "bulkhead-1": `flowchart TD
+  shopper["Shoppers"] -->|"purchase, including gift cards"| web["Checkout page"]
+  web --> checkout["Checkout service · gift card purchases never wait on tax"]
+  checkout -.->|"no single shared pool"| pool["One shared pool · 200 worker threads"]
+  checkout -->|"fraud calls only"| fpool["Fraud pool · 70 threads"]
+  checkout -->|"tax calls only"| tpool["Tax pool · 70 threads · when full, new tax calls fail right away"]
+  checkout -->|"address calls only"| apool["Address pool · 60 threads"]
+  fpool --> fraud["Fraud scoring vendor"]
+  tpool --> tax["Sales tax vendor · 90 ms average slowed to 9 s, no errors"]
+  apool --> addr["Address cleanup vendor"]
+  checkout --> orders[("Orders DB")]
+  checkout --> payments["Payment processor"]
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class fpool,tpool,apool added;
+  classDef removed stroke:#dc2626,stroke-width:3px,stroke-dasharray:4 4;
+  class pool removed;
+  linkStyle 3 stroke:#16a34a,stroke-width:3px;
+  linkStyle 4 stroke:#16a34a,stroke-width:3px;
+  linkStyle 5 stroke:#16a34a,stroke-width:3px;
+  linkStyle 6 stroke:#16a34a,stroke-width:3px;
+  linkStyle 7 stroke:#16a34a,stroke-width:3px;
+  linkStyle 8 stroke:#16a34a,stroke-width:3px;
+  linkStyle 2 stroke:#dc2626,stroke-width:3px;`,
+
+  "bulkhead-2": `flowchart TD
+  clin["Clinicians · chart lookups need under 400 ms"] --> ehr["Records app"]
+  ehr -->|"chart lookups only"| cpool["Chart pool · 45 connections · export can never take these"]
+  export["Research bulk export · moved to 7 am by mistake"] -->|"export only"| epool["Export pool · 15 connections · export waits here when full"]
+  ehr -.->|"no single shared pool"| pool["One connection pool · 60 connections"]
+  export -.-> pool
+  cpool --> db[("Records DB · CPU headroom the whole time")]
+  epool --> db
+  research["Research team"] --> export
+  ehr --> audit[("Audit log")]
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class cpool,epool added;
+  classDef removed stroke:#dc2626,stroke-width:3px,stroke-dasharray:4 4;
+  class pool removed;
+  linkStyle 1 stroke:#16a34a,stroke-width:3px;
+  linkStyle 2 stroke:#16a34a,stroke-width:3px;
+  linkStyle 5 stroke:#16a34a,stroke-width:3px;
+  linkStyle 6 stroke:#16a34a,stroke-width:3px;
+  linkStyle 3 stroke:#dc2626,stroke-width:3px;
+  linkStyle 4 stroke:#dc2626,stroke-width:3px;`,
+
+  "bulkhead-3": `flowchart TD
+  exchange["Ad exchanges"] -->|"bid callback · must answer in 80 ms"| lb["Load balancer"]
+  adv["Advertisers"] -->|"14-month report across 400 campaigns"| lb
+  lb -->|"bid callbacks only"| bid["Bidding container · own handler pool · own memory and CPU cap"]
+  lb -->|"report queries only"| rep["Reporting container · own handler pool · own memory and CPU cap · a heavy report fills only this"]
+  lb -.->|"no single shared process"| proc["One server process · 64 request handlers · one 8 GB heap"]
+  bid -->|"bid lookups"| budget[("Campaign budget cache")]
+  rep -->|"scans months of data"| warehouse[("Reporting data store")]
+  bid -->|"answers inside 80 ms"| exchange
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class bid,rep added;
+  classDef removed stroke:#dc2626,stroke-width:3px,stroke-dasharray:4 4;
+  class proc removed;
+  linkStyle 2 stroke:#16a34a,stroke-width:3px;
+  linkStyle 3 stroke:#16a34a,stroke-width:3px;
+  linkStyle 5 stroke:#16a34a,stroke-width:3px;
+  linkStyle 6 stroke:#16a34a,stroke-width:3px;
+  linkStyle 7 stroke:#16a34a,stroke-width:3px;
+  linkStyle 4 stroke:#dc2626,stroke-width:3px;`,
+
   "bulkhead-4": `flowchart TD
   biz["Business customers · statements promised within 5 s by contract"] --> api["Statement generation service"]
   retail["Retail customers · 95 percent of volume · no delivery promise"] --> api
@@ -3818,5 +4427,606 @@ const SOLVED_SCENARIO_DIAGRAMS = {
   linkStyle 6 stroke:#dc2626,stroke-width:3px;
   linkStyle 7 stroke:#dc2626,stroke-width:3px;
   linkStyle 8 stroke:#dc2626,stroke-width:3px;`,
+  "bulkhead-5": `flowchart TD
+  trucks["12,000 trucks · device messages"] -->|"5 message kinds"| ingest["Device gateway · routes by message kind"]
+  ingest --> gpsq[["GPS queue"]]
+  ingest --> tempq[["Temperature queue"]]
+  ingest --> doorq[["Door sensor queue"]]
+  ingest --> checkq[["Driver check-in queue"]]
+  ingest --> fwq[["Firmware confirmation queue"]]
+  ingest -.->|"no single mixed queue"| queue[["One queue · all 5 kinds"]]
+  gpsq -.-> gpsc["GPS consumers · 8 processes"]
+  tempq -.-> tempc["Temperature consumers · 4 processes"]
+  doorq -.-> doorc["Door sensor consumers · 4 processes"]
+  checkq -.-> checkc["Check-in consumers · 4 processes"]
+  fwq -.-> fwc["Firmware consumers · 4 processes · a hang stalls only these"]
+  fwc -->|"handler hangs 30 s per message"| blob[("Blob storage")]
+  gpsc -->|"GPS pings stay current"| tracking["Live tracking"]
+  tempc & doorc & checkc --> telemetry[("Telemetry DB")]
+  dispatch["Dispatchers"] --> tracking
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class gpsq,tempq,doorq,checkq,fwq,gpsc,tempc,doorc,checkc,fwc added;
+  classDef removed stroke:#dc2626,stroke-width:3px,stroke-dasharray:4 4;
+  class queue removed;
+  linkStyle 1 stroke:#16a34a,stroke-width:3px;
+  linkStyle 2 stroke:#16a34a,stroke-width:3px;
+  linkStyle 3 stroke:#16a34a,stroke-width:3px;
+  linkStyle 4 stroke:#16a34a,stroke-width:3px;
+  linkStyle 5 stroke:#16a34a,stroke-width:3px;
+  linkStyle 7 stroke:#16a34a,stroke-width:3px;
+  linkStyle 8 stroke:#16a34a,stroke-width:3px;
+  linkStyle 9 stroke:#16a34a,stroke-width:3px;
+  linkStyle 10 stroke:#16a34a,stroke-width:3px;
+  linkStyle 11 stroke:#16a34a,stroke-width:3px;
+  linkStyle 12 stroke:#16a34a,stroke-width:3px;
+  linkStyle 13 stroke:#16a34a,stroke-width:3px;
+  linkStyle 14 stroke:#16a34a,stroke-width:3px;
+  linkStyle 15 stroke:#16a34a,stroke-width:3px;
+  linkStyle 16 stroke:#16a34a,stroke-width:3px;
+  linkStyle 6 stroke:#dc2626,stroke-width:3px;`,
+
+  "rate-limiting-1": `flowchart TD
+  warehouse["Analytics warehouse"] --> events[("Day's conversion events")]
+  sched["Nightly scheduler"] --> job["Upload workers · send only what their leased locks allow"]
+  events -->|"enqueue all records"| queue[["Upload queue · holds the whole day"]]
+  queue -.->|"small batch every 200 ms"| job
+  job -->|"lease locks for a few seconds"| locks[("Lock store · 10 locks · each worth 50 writes/s")]
+  job -->|"at most 500 writes/s total"| api["Ad partner API · 500 writes/s per account"]
+  job -.->|"no pushing 4,000 writes/s"| api
+  api -.->|"rare 429"| job
+  job -.->|"on 429, requeue after a short random wait"| queue
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class job,queue,locks added;
+  linkStyle 2 stroke:#16a34a,stroke-width:3px;
+  linkStyle 3 stroke:#16a34a,stroke-width:3px;
+  linkStyle 4 stroke:#16a34a,stroke-width:3px;
+  linkStyle 5 stroke:#16a34a,stroke-width:3px;
+  linkStyle 8 stroke:#16a34a,stroke-width:3px;
+  linkStyle 6 stroke:#dc2626,stroke-width:3px;`,
+
+  "rate-limiting-2": `flowchart TD
+  appts[("Day's appointments · 90,000 checks")] --> batch["6 am batch job"]
+  batch -->|"enqueue all 90,000 checks"| queue[["Eligibility check queue"]]
+  queue -.->|"4 checks every 200 ms"| pool["Worker pool · sends only what its lock lease allows"]
+  pool -->|"lease lock"| locks[("Lock store · 20 requests/s for this key")]
+  pool -->|"at most 20 requests/s · all done in about 75 min"| vendor["Insurance eligibility vendor · contract allows 20 requests/s per key"]
+  pool -.->|"no firing at 300 requests/s"| vendor
+  vendor -.->|"on a rare rejection, requeue after a short random wait"| queue
+  pool --> results[("Eligibility results")]
+  staff["Front desk staff"] --> app["Clinic scheduling app"]
+  app --> results
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class queue,pool,locks added;
+  linkStyle 1 stroke:#16a34a,stroke-width:3px;
+  linkStyle 2 stroke:#16a34a,stroke-width:3px;
+  linkStyle 3 stroke:#16a34a,stroke-width:3px;
+  linkStyle 4 stroke:#16a34a,stroke-width:3px;
+  linkStyle 6 stroke:#16a34a,stroke-width:3px;
+  linkStyle 5 stroke:#dc2626,stroke-width:3px;`,
+
+  "rate-limiting-3": `flowchart TD
+  cron["Hourly timer · wakes at the top of the hour"] -.->|"no single burst at the top of the hour"| poller["Tracking poller · spreads calls across the hour"]
+  shipments[("Open shipments")] -->|"enqueue tracking lookups"| queue[["Lookup queue"]]
+  queue -.->|"1 call every 400 ms · about 9,000 per hour"| poller
+  poller -->|"steady calls all hour, under 10,000"| carrier["Carrier tracking API · 10,000 calls per hour per customer · fixed hourly window"]
+  poller -.->|"lookup done, requeue for its next turn"| queue
+  poller --> status[("Tracking status DB · fresh within minutes all hour")]
+  customers["Customers and support"] --> portal["Tracking page"]
+  portal --> status
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class poller,queue,status added;
+  classDef removed stroke:#dc2626,stroke-width:3px,stroke-dasharray:4 4;
+  class cron removed;
+  linkStyle 1 stroke:#16a34a,stroke-width:3px;
+  linkStyle 2 stroke:#16a34a,stroke-width:3px;
+  linkStyle 3 stroke:#16a34a,stroke-width:3px;
+  linkStyle 4 stroke:#16a34a,stroke-width:3px;
+  linkStyle 0 stroke:#dc2626,stroke-width:3px;`,
+
+  "rate-limiting-4": `flowchart TD
+  file[("Nightly file · 10 million transaction rows")] -->|"enqueue all rows"| queue[["Row queue"]]
+  queue -.->|"400 rows every 200 ms"| loader["Loader · 2,000 rows/s · done in about 83 min of the 6 h window"]
+  loader -->|"about 2,000 rows/s, each row sent once"| docdb[("Document DB · 20,000 units/s · 10 units per row · 2,000 rows/s")]
+  loader -.->|"no writing as fast as it reads"| docdb
+  docdb -.->|"on a rare refusal, requeue the row after a short random wait"| queue
+  loader --> logs[("Error logs · a few lines a night")]
+  app["Fintech app · reads"] --> docdb
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class queue,loader added;
+  linkStyle 0 stroke:#16a34a,stroke-width:3px;
+  linkStyle 1 stroke:#16a34a,stroke-width:3px;
+  linkStyle 2 stroke:#16a34a,stroke-width:3px;
+  linkStyle 4 stroke:#16a34a,stroke-width:3px;
+  linkStyle 3 stroke:#dc2626,stroke-width:3px;`,
+
+  "rate-limiting-5": `flowchart TD
+  players[("2 million player push tokens")] -->|"enqueue all 2 million"| queue[["Notification queue"]]
+  launch["Launch-day campaign"] --> queue
+  queue -.->|"small batch every 200 ms"| sender["Push senders · send only what their leased locks allow"]
+  sender -->|"lease locks"| locks[("Lock store · 6 locks · each worth 100 messages/s")]
+  sender -->|"at most 600 messages/s · list done in about 56 min"| vendor["Push vendor · plan allows 600 messages/s"]
+  sender -.->|"no pushing until refused"| vendor
+  vendor -.->|"on a rare rejection, requeue after a short random wait"| queue
+  vendor --> devices["Player phones"]
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class queue,sender,locks added;
+  linkStyle 0 stroke:#16a34a,stroke-width:3px;
+  linkStyle 1 stroke:#16a34a,stroke-width:3px;
+  linkStyle 2 stroke:#16a34a,stroke-width:3px;
+  linkStyle 3 stroke:#16a34a,stroke-width:3px;
+  linkStyle 4 stroke:#16a34a,stroke-width:3px;
+  linkStyle 6 stroke:#16a34a,stroke-width:3px;
+  linkStyle 5 stroke:#dc2626,stroke-width:3px;`,
+
+  "throttling-1": `flowchart TD
+  tenants["About 900 tenants · 3 to 8 requests/s each"] --> lb["Load balancer"]
+  script["One tenant's script · 150 requests/s for 40 min"] --> lb
+  lb --> limiter["Per-tenant limit check · runs before parsing or queries"]
+  limiter -->|"add 1 to the counter for this API key this second"| counters[("Shared counter store · limits can change while running")]
+  limiter -->|"under limit"| api["Analytics API servers · CPU back to normal"]
+  limiter -->|"over limit: 429 Too Many Requests · Retry-After 1"| script
+  api --> query["Query engine"]
+  query --> store[("Analytics store")]
+  api -.->|"p99 stays under 500 ms for other tenants"| tenants
+  scaler["Autoscaler · adds servers after about 6 min"] -.-> api
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class limiter,counters,api added;
+  linkStyle 2 stroke:#16a34a,stroke-width:3px;
+  linkStyle 3 stroke:#16a34a,stroke-width:3px;
+  linkStyle 4 stroke:#16a34a,stroke-width:3px;
+  linkStyle 5 stroke:#16a34a,stroke-width:3px;
+  linkStyle 8 stroke:#16a34a,stroke-width:3px;`,
+
+  "throttling-2": `flowchart TD
+  viewers["2.1 million concurrent viewers · capacity sized for 1.2 million"] --> edge["Delivery edge · stream plays smoothly"]
+  edge -->|"720p only while over the capacity line"| origin["Stream origin"]
+  origin --> enc["Encoding fleet · no hardware can be added mid-match"]
+  viewers --> app["Player backend"]
+  app -.->|"switched off while over the line"| recs["Personalized recommendation panel"]
+  app -.->|"switched off while over the line"| stats["Live stats overlay"]
+  recs -->|"18% of backend capacity freed"| shared[("Shared backend cluster")]
+  stats --> shared
+  monitor["Capacity monitor · viewers and CPU compared to the capacity line"] -->|"reads load"| edge
+  monitor -->|"reads load"| enc
+  monitor -->|"over the line: turn on degraded mode"| flags[("Degrade settings · can change while running")]
+  flags -->|"cap quality at 720p"| origin
+  flags -->|"hide overlay and recommendations"| app
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class monitor,flags,edge added;
+  classDef removed stroke:#dc2626,stroke-width:3px,stroke-dasharray:4 4;
+  class recs,stats removed;
+  linkStyle 1 stroke:#16a34a,stroke-width:3px;
+  linkStyle 8 stroke:#16a34a,stroke-width:3px;
+  linkStyle 9 stroke:#16a34a,stroke-width:3px;
+  linkStyle 10 stroke:#16a34a,stroke-width:3px;
+  linkStyle 11 stroke:#16a34a,stroke-width:3px;
+  linkStyle 12 stroke:#16a34a,stroke-width:3px;
+  linkStyle 4 stroke:#dc2626,stroke-width:3px;
+  linkStyle 5 stroke:#dc2626,stroke-width:3px;
+  linkStyle 6 stroke:#dc2626,stroke-width:3px;
+  linkStyle 7 stroke:#dc2626,stroke-width:3px;`,
+
+  "throttling-3": `flowchart TD
+  riders["Transit app riders"] --> lb["Load balancer"]
+  scrapers["2 scrapers · 22,000 requests/s combined · unique query strings"] --> lb
+  lb --> gate["Limit check at the edge · per API key · runs before cache lookup or query"]
+  gate -->|"count requests per key per second"| counters[("Shared counter store")]
+  gate -->|"over limit: 429 · Retry-After 5 · costs almost nothing"| scrapers
+  gate -->|"total let through held under 4,000 requests/s"| cache[("Response cache · most scraper calls miss")]
+  cache -->|"miss"| api["Open-data API servers · within capacity"]
+  api --> feed[("Bus arrivals DB")]
+  api -.->|"answers on time"| riders
+  gps["Bus GPS feed"] --> feed
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class gate,counters,api added;
+  linkStyle 2 stroke:#16a34a,stroke-width:3px;
+  linkStyle 3 stroke:#16a34a,stroke-width:3px;
+  linkStyle 4 stroke:#16a34a,stroke-width:3px;
+  linkStyle 5 stroke:#16a34a,stroke-width:3px;
+  linkStyle 8 stroke:#16a34a,stroke-width:3px;`,
+
+  "throttling-4": `flowchart TD
+  players["400,000 players · all try within 2 min at 6pm"] --> lb["Load balancer"]
+  lb --> admit["Admission check · counts sign-ins in progress · starts refusing before the hard cap"]
+  admit -->|"under 90,000/min"| queue[["Login queue · capped at what auth can finish"]]
+  admit -->|"over: 429 · Retry-After 30 · no password hash"| players
+  queue --> auth["Auth servers · steady 90,000 sign-ins/min"]
+  auth -->|"password hash only for admitted requests"| users[("Account DB")]
+  auth -->|"session token"| sessions[("Session store")]
+  auth -.->|"most players in within 5 min"| players
+  players -.->|"after login"| game["Game servers"]
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class admit,queue,auth added;
+  linkStyle 1 stroke:#16a34a,stroke-width:3px;
+  linkStyle 2 stroke:#16a34a,stroke-width:3px;
+  linkStyle 3 stroke:#16a34a,stroke-width:3px;
+  linkStyle 5 stroke:#16a34a,stroke-width:3px;
+  linkStyle 7 stroke:#16a34a,stroke-width:3px;`,
+
+  "throttling-5": `flowchart TD
+  meters["2 million meters · firmware now reports every 10 s instead of every 5 min"] -->|"200,000 messages/s · was 6,600"| gw["Device gateway"]
+  gw --> gate["Limit check before parsing · 1 reading per meter per 5 min · total cap 25,000/s"]
+  gate -->|"count per meter id"| counters[("Shared counter store · limits can change while running")]
+  gate -->|"over limit: reject · retry after 5 min"| meters
+  gate -->|"accepted readings only"| ingest["Ingest tier · within 25,000 messages/s"]
+  ingest -->|"200 ms write promise met"| tsdb[("Time-series DB")]
+  tsdb --> reports["Usage and billing reports"]
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class gate,counters,ingest added;
+  linkStyle 1 stroke:#16a34a,stroke-width:3px;
+  linkStyle 2 stroke:#16a34a,stroke-width:3px;
+  linkStyle 3 stroke:#16a34a,stroke-width:3px;
+  linkStyle 4 stroke:#16a34a,stroke-width:3px;
+  linkStyle 5 stroke:#16a34a,stroke-width:3px;`,
+
+  "shuffle-sharding-1": `flowchart TD
+  customers["8,999 other customers"] --> lb["Router · hash of customer id picks 2 of 26 nodes · no lookup table"]
+  bad["One customer · request pattern pegs node CPU"] --> lb
+  lb -->|"bad customer's pair: nodes 1 and 2 only"| n1["Node 1 · CPU pegged"]
+  lb -->|"bad customer's pair: nodes 1 and 2 only"| n2["Node 2 · CPU pegged"]
+  lb -->|"never gets the bad traffic"| n3["Nodes 3 to 26 · healthy"]
+  n1 --> db[("Customer data store")]
+  n2 --> db
+  n3 --> db
+  lb -.->|"325 possible pairs · customers sharing one node retry on their other node · only about 28 share both"| customers
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class lb,n3 added;
+  linkStyle 2 stroke:#16a34a,stroke-width:3px;
+  linkStyle 3 stroke:#16a34a,stroke-width:3px;
+  linkStyle 4 stroke:#16a34a,stroke-width:3px;
+  linkStyle 8 stroke:#16a34a,stroke-width:3px;`,
+
+  "shuffle-sharding-2": `flowchart TD
+  platform["Commerce platform · events for 12,000 merchants"] --> disp["Dispatcher · hash of merchant id picks 2 of 40 senders · uses the less busy one"]
+  disp -->|"slow merchant's deliveries"| q1[["Sender 1 queue"]]
+  disp -->|"slow merchant's deliveries"| q2[["Sender 2 queue"]]
+  disp -->|"other merchants, each by their own pair"| q3[["Sender 3 to 40 queues"]]
+  q1 --> s1["Sender 1 · slowed"]
+  q2 --> s2["Sender 2 · slowed"]
+  q3 --> s3["Senders 3 to 40 · never call the slow endpoint"]
+  s1 -->|"waits 30 s timeout"| slow["One merchant's endpoint · holds every connection 30 s"]
+  s2 -->|"waits 30 s timeout"| slow
+  s3 -.->|"on time · 780 possible pairs, only about 15 merchants share both slowed senders"| others["Other merchants' endpoints"]
+  s1 --> log[("Delivery attempt log")]
+  platform -.->|"no shared queue for all senders"| queue[["Shared delivery queue"]]
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class disp,q1,q2,q3,s1,s2,s3 added;
+  classDef removed stroke:#dc2626,stroke-width:3px,stroke-dasharray:4 4;
+  class queue removed;
+  linkStyle 0 stroke:#16a34a,stroke-width:3px;
+  linkStyle 1 stroke:#16a34a,stroke-width:3px;
+  linkStyle 2 stroke:#16a34a,stroke-width:3px;
+  linkStyle 3 stroke:#16a34a,stroke-width:3px;
+  linkStyle 4 stroke:#16a34a,stroke-width:3px;
+  linkStyle 5 stroke:#16a34a,stroke-width:3px;
+  linkStyle 6 stroke:#16a34a,stroke-width:3px;
+  linkStyle 9 stroke:#16a34a,stroke-width:3px;
+  linkStyle 11 stroke:#dc2626,stroke-width:3px;`,
+
+  "shuffle-sharding-3": `flowchart TD
+  clients["60,000 API clients"] --> lb["Router · hash of client id picks 2 of 100 nodes · retries stay on those 2"]
+  bad["One client · malformed request sent in a loop"] --> lb
+  lb -->|"attempt 1"| g1["Gateway node 1 · crashed"]
+  lb -->|"retry goes only to its other node"| g2["Gateway node 2 · crashed"]
+  lb -->|"never gets the bad client's requests"| g3["Gateway nodes 3 to 100 · still up"]
+  g1 --> pay["Payment services"]
+  g2 --> pay
+  g3 --> pay
+  pay --> ledger[("Ledger DB")]
+  lb -.->|"4,950 possible pairs · clients sharing one crashed node retry on their other node · only about 12 share both"| clients
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class lb,g3 added;
+  linkStyle 3 stroke:#16a34a,stroke-width:3px;
+  linkStyle 4 stroke:#16a34a,stroke-width:3px;
+  linkStyle 9 stroke:#16a34a,stroke-width:3px;`,
+
+  "shuffle-sharding-4": `flowchart TD
+  guilds["30,000 guilds · chat clients"] --> lb["Chat router · hash of guild id picks 2 of 64 relays · not 8 fixed groups"]
+  bot["One guild's bot · 5,000 messages/s"] --> lb
+  lb -->|"bot guild's pair: relays 1 and 2 only"| r1["Relay 1 · saturated"]
+  lb -->|"bot guild's pair: relays 1 and 2 only"| r2["Relay 2 · saturated"]
+  lb -->|"never gets bot traffic"| r3["Relays 3 to 64 · healthy"]
+  r1 --> hist[("Chat history store")]
+  r2 --> hist
+  r3 --> hist
+  lb -.->|"2,016 possible pairs · guilds sharing one relay switch to their other relay · only about 15 share both"| guilds
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class lb,r3 added;
+  linkStyle 2 stroke:#16a34a,stroke-width:3px;
+  linkStyle 3 stroke:#16a34a,stroke-width:3px;
+  linkStyle 4 stroke:#16a34a,stroke-width:3px;
+  linkStyle 8 stroke:#16a34a,stroke-width:3px;`,
+
+  "shuffle-sharding-5": `flowchart TD
+  fleets["10,000 customer device fleets"] --> ep["Connection router · hash of customer id picks 3 of 30 brokers · devices connect only to those 3"]
+  storm["One customer's 40,000 devices · reconnect loop after bad certificate rollout"] --> ep
+  ep -->|"storm customer's set"| b1["Broker 1 · overloaded"]
+  ep -->|"storm customer's set"| b2["Broker 2 · overloaded"]
+  ep -->|"storm customer's set"| b3["Broker 3 · overloaded"]
+  ep -->|"never sees the storm"| b4["Brokers 4 to 30 · healthy"]
+  b1 --> tel[("Telemetry store")]
+  b2 --> tel
+  b3 --> tel
+  b4 --> tel
+  ep -.->|"4,060 possible sets · fleets sharing 1 or 2 brokers reconnect to a healthy one · about 2 fleets share all 3"| fleets
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class ep,b4 added;
+  linkStyle 2 stroke:#16a34a,stroke-width:3px;
+  linkStyle 3 stroke:#16a34a,stroke-width:3px;
+  linkStyle 4 stroke:#16a34a,stroke-width:3px;
+  linkStyle 5 stroke:#16a34a,stroke-width:3px;
+  linkStyle 10 stroke:#16a34a,stroke-width:3px;`,
+
+  "leader-election-1": `flowchart TD
+  meters["90,000 smart water meters"] --> ingest["Reading ingest"]
+  ingest --> readings[("Readings table")]
+  asg["Autoscaler"] --> c1["Rollup container 1 · leader · renews lease every 2 s"]
+  asg --> c2["Rollup container 2 · follower · tries the lease every 2 s"]
+  asg --> c12["Rollup containers 3 to 12 · followers · try the lease every 2 s"]
+  c1 -->|"only the lease holder sweeps"| readings
+  c2 -.->|"no sweep while not leader"| readings
+  c12 -.->|"no sweep while not leader"| readings
+  c1 -->|"writes each hourly total once"| totals[("Hourly totals table · one row per meter and hour")]
+  c2 -.->|"no duplicate totals"| totals
+  c12 -.->|"no duplicate totals"| totals
+  billing["Billing app"] --> totals
+  c1 -->|"renew lease · expires 6 s after last renew"| lease[("Sweep lease row · owner container, expires at")]
+  c2 -.->|"take lease if it expired"| lease
+  c12 -.->|"take lease if it expired"| lease
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class c1,c2,c12,lease added;
+  linkStyle 5 stroke:#16a34a,stroke-width:3px;
+  linkStyle 8 stroke:#16a34a,stroke-width:3px;
+  linkStyle 12 stroke:#16a34a,stroke-width:3px;
+  linkStyle 13 stroke:#16a34a,stroke-width:3px;
+  linkStyle 14 stroke:#16a34a,stroke-width:3px;
+  linkStyle 6 stroke:#dc2626,stroke-width:3px;
+  linkStyle 7 stroke:#dc2626,stroke-width:3px;
+  linkStyle 9 stroke:#dc2626,stroke-width:3px;
+  linkStyle 10 stroke:#dc2626,stroke-width:3px;`,
+
+  "leader-election-2": `flowchart TD
+  clients["Banking apps"] --> lb["Load balancer"]
+  lb --> s0["Account service copy 0 · current leader · renews lease every 10 s"]
+  lb --> s1["Account service copies 1 to 5 · retry the lease every 10 s"]
+  s0 -->|"daily interest job runs only on the lease holder"| db[("Accounts DB")]
+  s1 -->|"requests, plus the job if one of them becomes leader"| db
+  cfg["Deploy config · env variable turns the job on only for copy 0"] -.-> s0
+  cfg -.-> s1
+  s0 -->|"renew lease · expires 30 s after last renew"| lease[("Interest job lease row · owner copy, expires at")]
+  s1 -.->|"take lease when it expired"| lease
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class s0,s1,lease added;
+  classDef removed stroke:#dc2626,stroke-width:3px,stroke-dasharray:4 4;
+  class cfg removed;
+  linkStyle 3 stroke:#16a34a,stroke-width:3px;
+  linkStyle 4 stroke:#16a34a,stroke-width:3px;
+  linkStyle 7 stroke:#16a34a,stroke-width:3px;
+  linkStyle 8 stroke:#16a34a,stroke-width:3px;
+  linkStyle 5 stroke:#dc2626,stroke-width:3px;
+  linkStyle 6 stroke:#dc2626,stroke-width:3px;`,
+
+  "leader-election-3": `flowchart TD
+  players["Players waiting for a match"] --> api["Matchmaking API"]
+  api --> i1["Matchmaking instance 1 · leader · checks it still holds the lease before each 2 s sweep"]
+  api --> i2["Matchmaking instances 2 to 8 · followers · no sweep"]
+  i1 -->|"reads the whole waiting pool"| pool[("Waiting player pool")]
+  i2 -.->|"no sweep while not leader"| pool
+  i1 -->|"each player in exactly one match"| gs["Game server fleet"]
+  i2 -.->|"no match assignments"| gs
+  gs --> clients["Game clients"]
+  i1 -->|"renew lease every 1 s · expires after 3 s"| lease[("Sweep lease · owner instance, expires at")]
+  i2 -.->|"take lease if the leader freezes and it expires"| lease
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class i1,i2,lease added;
+  linkStyle 5 stroke:#16a34a,stroke-width:3px;
+  linkStyle 8 stroke:#16a34a,stroke-width:3px;
+  linkStyle 9 stroke:#16a34a,stroke-width:3px;
+  linkStyle 4 stroke:#dc2626,stroke-width:3px;
+  linkStyle 6 stroke:#dc2626,stroke-width:3px;`,
+
+  "leader-election-4": `flowchart TD
+  c1["Consumer instance 1 · holds the feed lease · closes the session if a renew fails"] -->|"only the lease holder opens the session"| carrier["Carrier scan event feed · one open session per account"]
+  c2["Consumer instances 2 to 5 · running on standby"] -.->|"no session while not leader"| carrier
+  carrier -->|"steady stream, no gaps"| c1
+  c1 --> events[("Package scan events DB")]
+  c2 -.->|"no writes while on standby"| events
+  events --> tracking["Tracking page and API"]
+  c1 -->|"renew claim every 5 s · expires after 15 s"| lease[("Feed lease · owner instance, expires at")]
+  c2 -.->|"retry claim · new holder connects once it expires"| lease
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class c1,c2,lease added;
+  linkStyle 0 stroke:#16a34a,stroke-width:3px;
+  linkStyle 2 stroke:#16a34a,stroke-width:3px;
+  linkStyle 6 stroke:#16a34a,stroke-width:3px;
+  linkStyle 7 stroke:#16a34a,stroke-width:3px;
+  linkStyle 1 stroke:#dc2626,stroke-width:3px;
+  linkStyle 4 stroke:#dc2626,stroke-width:3px;`,
+
+  "leader-election-5": `flowchart TD
+  rA["Rebalancer replica · zone A · leader, issues commands"] -->|"reads queue depths"| metrics[("Fleet queue depth metrics")]
+  rB["Rebalancer replica · zone B · follower"] -->|"reads queue depths"| metrics
+  rC["2 rebalancer replicas · zone C · followers"] -->|"read queue depths"| metrics
+  rA -->|"reassignment commands tagged with lease number"| ctl["Encoder control API · rejects commands with an older lease number"]
+  rB -.->|"no commands while follower"| ctl
+  rC -.->|"no commands while follower"| ctl
+  ctl --> enc["Encoder fleet · stays on its assigned region"]
+  enc --> metrics
+  rA -->|"renew lease every 5 s · expires after 15 s"| lease[("Leader lease in a consensus store spread across 3 zones")]
+  rB -.->|"take lease if zone A goes down and it expires"| lease
+  rC -.->|"take lease if it expires"| lease
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class rA,rB,rC,ctl,enc,lease added;
+  linkStyle 3 stroke:#16a34a,stroke-width:3px;
+  linkStyle 8 stroke:#16a34a,stroke-width:3px;
+  linkStyle 9 stroke:#16a34a,stroke-width:3px;
+  linkStyle 10 stroke:#16a34a,stroke-width:3px;
+  linkStyle 4 stroke:#dc2626,stroke-width:3px;
+  linkStyle 5 stroke:#dc2626,stroke-width:3px;`,
+
+  "scheduler-agent-supervisor-1": `flowchart TD
+  portal["Provider claim submissions · 4,000 a day"] --> api["Claims API"]
+  api -->|"writes claim row"| db[("Claims DB")]
+  api -->|"enqueue claim"| q[["Claim work queue"]]
+  q --> worker["Scheduler · runs the 6 steps in order"]
+  worker -->|"one row per step · status, owner, retry count, complete-by time"| steps[("Step state table")]
+  worker -->|"step 2 and step 5 requests"| aq[["Agent request queue"]]
+  aq --> agent["Agents · call outside system, retry short failures, give up at complete-by time"]
+  agent -->|"step 2 eligibility check"| elig["Eligibility system"]
+  agent -->|"step 5 payment authorization"| pay["Payment authorization system"]
+  agent -->|"reply with result"| worker
+  worker -->|"step 3 provider lookup"| prov[("Provider directory")]
+  worker -->|"sets claim status"| db
+  sup["Supervisor · timer every 5 min"] -->|"find steps still running past complete-by time"| steps
+  sup -->|"retries left: reset step to pending"| worker
+  sup -->|"retries used up: mark failed"| esc["Claims ops escalation queue · same day"]
+  eng["Engineer · runs UPDATE statements by hand 3 weeks later"] -.->|"no more hand UPDATE statements"| db
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class worker,steps,aq,agent,sup,esc added;
+  classDef removed stroke:#dc2626,stroke-width:3px,stroke-dasharray:4 4;
+  class eng removed;
+  linkStyle 4 stroke:#16a34a,stroke-width:3px;
+  linkStyle 5 stroke:#16a34a,stroke-width:3px;
+  linkStyle 6 stroke:#16a34a,stroke-width:3px;
+  linkStyle 7 stroke:#16a34a,stroke-width:3px;
+  linkStyle 8 stroke:#16a34a,stroke-width:3px;
+  linkStyle 9 stroke:#16a34a,stroke-width:3px;
+  linkStyle 12 stroke:#16a34a,stroke-width:3px;
+  linkStyle 13 stroke:#16a34a,stroke-width:3px;
+  linkStyle 14 stroke:#16a34a,stroke-width:3px;
+  linkStyle 15 stroke:#dc2626,stroke-width:3px;`,
+
+  "scheduler-agent-supervisor-2": `flowchart TD
+  app["Retail store activation app"] --> api["Activation API"]
+  api -->|"activation row"| db[("Activations DB · one row per step")]
+  api --> worker["Scheduler · runs the 4 steps in order"]
+  worker -->|"each step · status, owner, retry count, complete-by time"| db
+  worker -->|"step request"| aq[["Agent queue"]]
+  aq --> agent["Vendor agents · give up at complete-by time"]
+  agent -->|"1. reserve number"| num["Number reservation vendor"]
+  agent -->|"2. register SIM"| sim["SIM registration vendor"]
+  agent -->|"3. set up billing account"| bill["Billing vendor"]
+  agent -->|"4. provision network"| net["Network provisioning vendor"]
+  sup["Supervisor · timer every 2 min"] -->|"find steps in progress past complete-by time"| db
+  sup -->|"retries left: reset step to pending"| worker
+  sup -->|"retries used up: mark failed, run undo"| undo["Undo commands for each step"]
+  undo -->|"release number, cancel SIM, close billing account"| agent
+  support["Support team · morning spreadsheet of stuck line numbers"] -.->|"no morning spreadsheet"| api
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class db,worker,aq,agent,sup,undo added;
+  classDef removed stroke:#dc2626,stroke-width:3px,stroke-dasharray:4 4;
+  class support removed;
+  linkStyle 3 stroke:#16a34a,stroke-width:3px;
+  linkStyle 4 stroke:#16a34a,stroke-width:3px;
+  linkStyle 5 stroke:#16a34a,stroke-width:3px;
+  linkStyle 6 stroke:#16a34a,stroke-width:3px;
+  linkStyle 7 stroke:#16a34a,stroke-width:3px;
+  linkStyle 8 stroke:#16a34a,stroke-width:3px;
+  linkStyle 9 stroke:#16a34a,stroke-width:3px;
+  linkStyle 10 stroke:#16a34a,stroke-width:3px;
+  linkStyle 11 stroke:#16a34a,stroke-width:3px;
+  linkStyle 12 stroke:#16a34a,stroke-width:3px;
+  linkStyle 13 stroke:#16a34a,stroke-width:3px;
+  linkStyle 14 stroke:#dc2626,stroke-width:3px;`,
+
+  "scheduler-agent-supervisor-3": `flowchart TD
+  signup["Customer signup"] --> api["Provisioning API"]
+  api --> wf["Scheduler · runs the 9 steps, any instance can resume a run"]
+  wf -->|"reserve subdomain"| dns["DNS provider"]
+  wf -->|"issue certificate"| ca["Certificate authority"]
+  wf -->|"create containers"| cp["Container platform"]
+  wf -->|"create subscription"| billing["Billing system"]
+  wf -->|"each step · status, owner instance, retry count, complete-by time"| db[("Environments DB · step state rows")]
+  drain["Node drain"] -.->|"terminates the process mid-run"| wf
+  sup["Supervisor · timer every 5 min"] -->|"find steps running past complete-by time"| db
+  sup -->|"retries left: reset step to pending"| wf
+  sup -->|"retries used up: mark run failed"| undo["Undo steps · release subdomain, revoke certificate, delete containers"]
+  undo -->|"release reserved subdomain"| dns
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class wf,db,sup,undo added;
+  linkStyle 6 stroke:#16a34a,stroke-width:3px;
+  linkStyle 8 stroke:#16a34a,stroke-width:3px;
+  linkStyle 9 stroke:#16a34a,stroke-width:3px;
+  linkStyle 10 stroke:#16a34a,stroke-width:3px;
+  linkStyle 11 stroke:#16a34a,stroke-width:3px;`,
+
+  "scheduler-agent-supervisor-4": `flowchart TD
+  cron["Nightly payout batch"] --> worker["Scheduler · runs 5 steps · ignores replies for an old attempt number"]
+  worker -->|"steps 1 and 2 · compute and hold balance"| ledger[("Seller balance ledger")]
+  worker -->|"step 3 request with attempt number and complete-by time"| aq[["Transfer agent queue"]]
+  worker -->|"state SENDING · owner, retry count, complete-by time"| db[("Payouts DB")]
+  worker -->|"steps 4 and 5 · mark paid, email seller"| notify["Seller notification service"]
+  deploy["Deploy pipeline"] -.->|"kills worker mid-batch"| worker
+  db --> report["Finance payout report"]
+  aq --> agent["Bank agent · gives up silently once complete-by time passes"]
+  agent -->|"transfer with payout id as idempotency key"| bank["Bank transfer API"]
+  agent -->|"result only if before complete-by time"| worker
+  sup["Supervisor · checks every 2 min during the batch"] -->|"find SENDING rows past complete-by time"| db
+  sup -->|"retries left: reset to pending, new attempt number"| worker
+  sup -->|"retries used up: mark failed, page on-call"| oncall["Payments on-call · same night"]
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class worker,db,aq,agent,sup,oncall added;
+  linkStyle 2 stroke:#16a34a,stroke-width:3px;
+  linkStyle 3 stroke:#16a34a,stroke-width:3px;
+  linkStyle 7 stroke:#16a34a,stroke-width:3px;
+  linkStyle 8 stroke:#16a34a,stroke-width:3px;
+  linkStyle 9 stroke:#16a34a,stroke-width:3px;
+  linkStyle 10 stroke:#16a34a,stroke-width:3px;
+  linkStyle 11 stroke:#16a34a,stroke-width:3px;
+  linkStyle 12 stroke:#16a34a,stroke-width:3px;`,
+
+  "scheduler-agent-supervisor-5": `flowchart TD
+  am["Account manager"] -->|"launch campaign"| api["Campaign API"]
+  api --> worker["Scheduler · runs the 7 steps in order"]
+  worker -->|"steps 1 to 5 · one request per exchange"| aq[["Agent queue"]]
+  worker -->|"step 6 · approve creative"| creative["Creative approval service"]
+  worker -->|"step 7 · set budget"| budget["Budget service"]
+  worker -->|"step rows · status, owner, retry count, complete-by time"| db[("Campaigns DB · step state rows")]
+  am -.->|"no spotting by eye or manual re-runs"| api
+  aq --> agent["Exchange agents · give up at complete-by time"]
+  agent -->|"create campaign keyed by launch id, so a retry finds the existing one"| ex["5 ad exchange APIs · calls sometimes time out"]
+  agent -->|"result"| worker
+  sup["Supervisor · timer every 5 min"] -->|"find steps running past complete-by time"| db
+  sup -->|"retries left: reset step to pending"| worker
+  sup -->|"retries used up: mark failed, run undo"| undo["Undo steps · pause campaign on exchanges already live"]
+  undo --> agent
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class worker,aq,db,agent,sup,undo added;
+  linkStyle 2 stroke:#16a34a,stroke-width:3px;
+  linkStyle 5 stroke:#16a34a,stroke-width:3px;
+  linkStyle 7 stroke:#16a34a,stroke-width:3px;
+  linkStyle 8 stroke:#16a34a,stroke-width:3px;
+  linkStyle 9 stroke:#16a34a,stroke-width:3px;
+  linkStyle 10 stroke:#16a34a,stroke-width:3px;
+  linkStyle 11 stroke:#16a34a,stroke-width:3px;
+  linkStyle 12 stroke:#16a34a,stroke-width:3px;
+  linkStyle 13 stroke:#16a34a,stroke-width:3px;
+  linkStyle 6 stroke:#dc2626,stroke-width:3px;`,
 
 };
