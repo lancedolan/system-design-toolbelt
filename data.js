@@ -252,9 +252,11 @@ const PATTERN_CATEGORIES = [
       },
       {
         id: "bulkhead",
-        name: "Bulkhead",
+        name: "Bulkhead / Cell-Based Architecture",
         trigger: "One misbehaving workload or tenant can exhaust shared pools and take down unrelated functionality.",
-        implementation: `Split your servers, threads, and connection pools into separate groups, one group per caller or per dependency. Give each group a fixed limit, such as its own set of 10 database connections, or its own container with a memory cap and a CPU cap. When one dependency stops answering, only the group assigned to it runs out of connections, and calls to the other dependencies keep working. Choose the group boundaries by customer, by feature, or by dependency, and track each group's error rate and response time separately.`,
+        implementation: `Split your servers, threads, and connection pools into separate groups, one group per caller or per dependency. Give each group a fixed limit, such as its own set of 10 database connections, or its own container with a memory cap and a CPU cap. When one dependency stops answering, only the group assigned to it runs out of connections, and calls to the other dependencies keep working. Choose the group boundaries by customer, by feature, or by dependency, and track each group's error rate and response time separately.
+
+Bulkhead and cell-based architecture use the same idea: split the system into isolated parts so a failure in one part cannot spread to the others. The difference is size: a bulkhead splits resources inside one service, such as thread pools or connection pools, while a cell is a full copy of the whole stack (its own services and its own database) and a routing layer sends each customer to one cell.`,
         links: [
           "https://learn.microsoft.com/en-us/azure/architecture/patterns/bulkhead",
           "https://en.wikipedia.org/wiki/Bulkhead_pattern",

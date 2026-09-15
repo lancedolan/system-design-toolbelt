@@ -38,7 +38,7 @@
 |---|---|---|
 | Circuit Breaker | A failing dependency is being hammered with doomed calls, wasting resources and slowing everything down. | [microsoft.com](https://learn.microsoft.com/en-us/azure/architecture/patterns/circuit-breaker) |
 | Retry with Backoff and Jitter | Failures are transient, but naive retries risk synchronized retry storms. | [amazon.com](https://aws.amazon.com/builders-library/timeouts-retries-and-backoff-with-jitter/) |
-| Bulkhead | One misbehaving workload or tenant can exhaust shared pools and take down unrelated functionality. | [microsoft.com](https://learn.microsoft.com/en-us/azure/architecture/patterns/bulkhead) |
+| Bulkhead / Cell-Based Architecture | One misbehaving workload or tenant can exhaust shared pools and take down unrelated functionality. | [microsoft.com](https://learn.microsoft.com/en-us/azure/architecture/patterns/bulkhead) |
 | Rate Limiting | Your own callers or jobs must be paced to stay within a downstream service's limits. | [microsoft.com](https://learn.microsoft.com/en-us/azure/architecture/patterns/rate-limiting-pattern) |
 | Throttling | Demand can exceed capacity and you'd rather shed or slow load than fail entirely. | [microsoft.com](https://learn.microsoft.com/en-us/azure/architecture/patterns/throttling) |
 | Shuffle Sharding | A single abusive tenant in a shared fleet would otherwise degrade a large fraction of customers. | [amazon.com](https://aws.amazon.com/builders-library/workload-isolation-using-shuffle-sharding/) |

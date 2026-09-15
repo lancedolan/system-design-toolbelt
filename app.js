@@ -68,7 +68,7 @@ function detailView(pattern) {
       <h3>When to use</h3>
       <p>${esc(pattern.trigger)}</p>
       <h3>How to implement</h3>
-      <p>${esc(pattern.implementation)}</p>
+      ${pattern.implementation.split(/\n\s*\n/).map((para) => `<p>${esc(para)}</p>`).join("")}
       <div class="diagram" id="diagram"></div>
       <h3>Learn more</h3>
       <ul class="links">
