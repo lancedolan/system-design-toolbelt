@@ -264,9 +264,10 @@ const DIAGRAMS = {
 
   "scheduler-agent-supervisor": `flowchart LR
   scheduler[Scheduler] -->|record step| store[(State Store)]
-  scheduler --> agent[Agent]
+  scheduler -->|request| queue[[Queue]]
+  queue --> agent[Agent]
   agent -->|calls| svcA[Service A]
-  agent -->|update status| store
+  agent -.->|reply| scheduler
   supervisor[Supervisor] -.->|scan for stalled| store
   supervisor -.->|retry or undo| scheduler`,
 
