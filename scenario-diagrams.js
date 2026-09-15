@@ -610,6 +610,505 @@ const SCENARIO_DIAGRAMS = {
   pool --> acct[(Account and transaction DB)]
   pool --> files[(Generated statement store)]`,
 
+  "cache-aside-1": `flowchart TD
+  shoppers["Shoppers · 12,000 page views/s, 92% land on the same 4,000 SKUs"] --> lb["Load Balancer"]
+  lb --> web["Product Page Service"]
+  web -->|"single-row read by SKU on every view · 6 ms each"| db[("Product DB · 88% CPU · reads outnumber writes 900 to 1")]
+  admin["Admin Tool"] -->|"price and title edits a few times a day"| db
+  web --> search["Search Service"]
+  web -.-> cdn["CDN · product images"]`,
+
+  "cache-aside-2": `flowchart TD
+  clients["Game clients · 10 players per match"] --> match["Match Service"]
+  match -->|"about 45,000 single-row reads/s by item id · 4 ms each"| db[("Item Definitions DB · 8,000 rows, 2 KB each · biggest bill line")]
+  designers["Designer Tool"] -->|"edits about twice a week"| db
+  match --> mm["Matchmaking Service"]
+  match --> history[("Match History DB")]`,
+
+  "cache-aside-3": `flowchart TD
+  exchange["Ad exchange · 200,000 bid requests/s"] -->|"80 ms total to respond"| bid["Bidding Service"]
+  bid -->|"read targeting by campaign id · 3 ms average, 40 ms under load"| db[("Campaign DB · 3,500 active campaigns")]
+  advertisers["Advertiser Console"] -->|"a few hundred edits/hour"| db
+  bid --> model["Bid Pricing Model"]
+  bid -.->|"timeouts when the lookup takes 40 ms"| exchange
+  bid --> events[["Bid Events Stream"]]`,
+
+  "cache-aside-4": `flowchart TD
+  desk["Front desk staff · checks the same patient 4 to 5 times a visit"] --> billing["Clinic Billing System"]
+  billing -->|"60,000 calls/day for 14,000 patients · 800 ms and 2 cents each"| payer["Payer Eligibility API · external"]
+  billing --> db[("Billing DB")]
+  billing --> sched["Scheduling Service"]`,
+
+  "cache-aside-5": `flowchart TD
+  apps["Streaming apps · 30,000 reads/s, 5% of titles get 80% of reads"] --> gw["API Gateway"]
+  gw --> catalog["Catalog Service"]
+  catalog -->|"key lookup by title id · 5 ms"| db[("Catalog DB · near its connection limit")]
+  db -.-> replicas[("Read Replicas · already maxed")]
+  content["Content Team Tool"] -->|"artwork and description updates"| db
+  catalog --> rec["Recommendations Service"]`,
+
+  "sharding-1": `flowchart TD
+  merchants["Merchant card terminals"] --> auth["Authorization Service"]
+  auth -->|"38,000 inserts/s at peak · nearly every query scoped to one merchant"| pg[("PostgreSQL primary · 11 TB, grows 900 GB/month, largest instance sold")]
+  pg -.-> replica[("Read Replicas · no help for writes or disk")]
+  auth --> fraud["Fraud Scoring"]
+  dashboard["Merchant Dashboard"] --> pg`,
+
+  "sharding-2": `flowchart TD
+  devices["2.4 million devices"] -->|"60,000 inserts/s"| ingest["Ingest Service"]
+  ingest --> tsdb[("Time-series DB server · 94% disk, CPU pegged every morning shift, top instance size")]
+  dash["Plant Dashboards · one device's readings per query"] --> tsdb
+  ingest --> alerts["Alerting Service"]
+  ingest -.-> archive[("Cold Archive · last year's readings")]`,
+
+  "sharding-3": `flowchart TD
+  users["HR users at 14,000 companies"] --> app["HR App"]
+  imports["Bulk imports from 3 enterprise customers"] --> app
+  app -->|"every query carries a company id"| mysql[("One MySQL DB · 8 TB · 3 customers hold 60% · imports slow everyone")]
+  mysql -->|"backup takes 9 h, restore misses recovery target"| backup[("Backup Store")]
+  app --> login["Login Service"]`,
+
+  "sharding-4": `flowchart TD
+  players["90 million player accounts"] --> gs["Game Servers"]
+  gs -->|"inventory read or write for one player · p99 write 340 ms"| docdb[("Document DB primary · 768 GB RAM, working set no longer fits, disk thrashing")]
+  docdb -.-> secondary[("Secondary · failover")]
+  gs --> match["Matchmaking Service"]
+  shop["In-game Store"] --> gs`,
+
+  "sharding-5": `flowchart TD
+  scanners["Parcel scanners"] -->|"scan events"| ingest["Tracking Ingest Service"]
+  ingest --> db[("Tracking DB · 6.2 billion rows, grows 1.5 TB/week, vendor maximum size")]
+  web["Customer tracking page · one tracking number at a time"] --> api["Tracking API"]
+  api --> db
+  db -.->|"nightly vacuum runs into the morning peak"| vacuum["Vacuum Job"]
+  api --> notify["Notification Service"]`,
+
+  "materialized-view-1": `flowchart TD
+  nurses["Charge nurses · about 200 opens/hour"] --> dash["Ward Dashboard"]
+  dash -->|"join 7 tables, group by over 40 million rows · 38 s"| clin[("Clinical DB · normalized tables")]
+  ehr["Clinical system"] -->|"writes admissions, transfers, discharges"| clin
+  dash --> sso["Hospital Sign-in"]`,
+
+  "materialized-view-2": `flowchart TD
+  advertisers["Advertisers · reload the page constantly"] --> portal["Advertiser Portal"]
+  portal -->|"scan 900 million rows per advertiser · 22 s"| imp[("Impression table · raw rows audited by finance")]
+  portal -->|"join"| rates[("Campaigns and Billing Rates DB")]
+  adservers["Ad Servers"] -->|"append impressions"| imp
+  finance["Finance Audit"] --> imp`,
+
+  "materialized-view-3": `flowchart TD
+  creators["Creators · load the page many times a day"] --> page["Channel Analytics Page"]
+  page -->|"join and aggregate 28 days · 45 s, page times out"| events[("View Events table")]
+  page --> subs[("Subscriptions table")]
+  page --> meta[("Video Metadata table")]
+  player["Video Player"] -->|"view events"| events
+  page -.-> cdn["CDN · thumbnails"]`,
+
+  "materialized-view-4": `flowchart TD
+  managers["Relationship managers · about 3,000 overviews/day"] --> overview["Customer Overview App"]
+  overview -->|"query 5 tables in different schemas · 14 s"| core[("Core Banking DB · checking, savings, loans, cards")]
+  corebank["Core banking system"] -->|"owns and writes the source tables"| core
+  overview --> kyc["KYC Service"]`,
+
+  "materialized-view-5": `flowchart TD
+  shoppers["Shoppers · 4,000 category page hits/min"] --> lb["Load Balancer"]
+  lb --> browse["Category Browse Service"]
+  browse -->|"join 30 million rows · 18 s per category"| products[("Products DB")]
+  browse --> prices[("Prices DB")]
+  browse --> stock[("Warehouse Stock DB · changes constantly")]
+  wms["Warehouse System"] -->|"stock updates"| stock
+  browse -.-> images["Image CDN"]`,
+
+  "index-table-1": `flowchart TD
+  agents["Support agents"] -->|"all orders for a customer email"| support["Support tool"]
+  customers["Customers"] -->|"900 orders/s"| orders["Order service"]
+  orders -->|"put by order ID"| kv[("Order store · key is order ID · 400 million items · no other query")]
+  support -->|"full scan of 400 million items · takes minutes, burns read budget"| kv
+  orders --> pay["Payment service"]
+  kv -.-> cache[("Order status cache")]`,
+
+  "index-table-2": `flowchart TD
+  riders["Rider app"] --> api["Trip API"]
+  api -->|"find nearby driver"| match["Matching service"]
+  match -->|"read by driver ID"| drivers[("Driver store · partitioned by hash of driver ID · 64 partitions · no secondary index")]
+  onboard["Driver onboarding"] -->|"write driver record"| drivers
+  compliance["Compliance tool"] -->|"drivers by license state · fans out to all 64 partitions · 30 s"| drivers
+  match --> geo[("Driver location cache")]`,
+
+  "index-table-3": `flowchart TD
+  listeners["Listener app"] --> api["Catalog API"]
+  api -->|"read album by album ID"| store[("Catalog store · wide-column · key is album ID · 120 million track rows")]
+  api -->|"tracks featuring a performer · 5,000/min · scans 120 million rows"| store
+  labels["Label ingest job"] -->|"catalog changes a few times a day"| store
+  api --> art["Cover art CDN"]
+  api --> plays[("Play count store")]`,
+
+  "index-table-4": `flowchart TD
+  billing["Billing staff"] -->|"has insurance member number"| billapp["Billing app"]
+  clinic["Clinic staff"] --> ehr["Records service"]
+  ehr -->|"read and write by patient ID"| docs[("Patient document store · key is patient ID · 12 million documents · no secondary index")]
+  billapp -->|"scan for member number · 40 s · 600 lookups/hour"| docs
+  billapp --> claims[("Claims DB")]
+  ehr --> audit[("Access audit log")]`,
+
+  "index-table-5": `flowchart TD
+  staff["Floor staff handheld scanner"] -->|"scan pallet barcode"| inv["Inventory service"]
+  inv -->|"walks all 8 million item records · 25 s"| items[("Item store · key is SKU · no other query")]
+  erp["Purchasing system"] -->|"item changes about twice a day"| items
+  inv --> locs[("Bin location DB")]
+  inv --> picks["Pick list service"]`,
+
+  "cqrs-1": `flowchart TD
+  traders["Trader app"] -->|"place order · 400 writes/s"| oms["Order service · one set of order classes · margin, position limits, eligibility rules plus dozens of display-only fields"]
+  blotter["Blotter screens"] -->|"60,000 reads/s"| oms
+  oms --> db[("Orders DB · one shape for both")]
+  mkt["Market data feed"] -->|"prices"| oms
+  oms -->|"route order"| exch["Exchange gateway"]`,
+
+  "cqrs-2": `flowchart TD
+  adjusters["Adjusters"] -->|"claim updates · 30/s"| claims["Claims service · one set of domain objects · validation, coverage rules, state transitions"]
+  customers["Customer status page"] -->|"12,000 views/s · 900 ms each"| claims
+  claims -->|"loads full object graph"| db[("Claims DB · one set of indexes")]
+  claims --> docs[("Claim documents store")]
+  claims -->|"approved payout"| pay["Payments system"]`,
+
+  "cqrs-3": `flowchart TD
+  guests["Guest web and app"] -->|"book · 200/s"| svc["Booking service · one model · overlapping stays, rate plans, cancellation windows, plus display fields for every screen"]
+  guests -->|"availability and reservation lists · 80,000 reads/s"| svc
+  svc --> db[("Reservations DB")]
+  svc -->|"rates"| rates[("Rate plan cache")]
+  svc -->|"confirmation email"| mail["Email service"]`,
+
+  "cqrs-4": `flowchart TD
+  scanners["Movement scanners"] -->|"stock movements · 150/s"| wms["Warehouse service · shared entities · allocation and lot tracking plus 40 display fields and mapping helpers"]
+  dash["Picker dashboards"] -->|"25,000 reads/s"| wms
+  wms --> db[("Stock DB · one shape for both")]
+  wms -->|"shipment ready"| carrier["Carrier integration"]
+  erp["ERP"] -->|"purchase orders"| wms`,
+
+  "cqrs-5": `flowchart TD
+  stores["Retail stores and call center"] -->|"activate service"| prov["Provisioning service · shared objects · SIM, plan, network rules plus portal fields"]
+  portal["Customer portal · 200 times activation traffic"] -->|"loads full objects"| prov
+  prov --> db[("Subscriber DB · sized for activation")]
+  prov -->|"activate"| net["Network provisioning system"]
+  prov --> billing["Billing system"]
+  dev["Portal developers"] -.->|"new portal field edits the activation rules class · 2 outages"| prov`,
+
+  "event-sourcing-1": `flowchart TD
+  app["Mobile banking app"] -->|"deposits and transfers"| ledger["Ledger service"]
+  fees["Fee batch job"] -->|"monthly fees"| ledger
+  ledger -->|"UPDATE balance column in place"| accts[("Accounts table · one row per account, current balance only")]
+  accts -.->|"backup at midnight"| backup[("Nightly backup")]
+  support["Support team · balance at 2:14pm three months ago?"] -->|"only midnight copies to look at"| backup
+  ledger --> fraud["Fraud scoring"]`,
+
+  "event-sourcing-2": `flowchart TD
+  doctor["Doctors · change dose"] --> ord["Medication ordering module"]
+  pharm["Pharmacists · adjust frequency"] --> ord
+  nurse["Nurses · mark hold"] --> ord
+  ord -->|"UPDATE prescription row in place · 11 columns"| rx[("Prescriptions table · current values only")]
+  rx -.->|"copies 3 of 11 columns · silently broken for 6 months"| shadow[("Shadow history table")]
+  ord --> mar["Medication administration record"]
+  auditors["Auditors · dose at 3:00pm, who changed it in the 20 min before?"] -->|"answer not in the database"| shadow`,
+
+  "event-sourcing-3": `flowchart TD
+  players["900,000 daily players"] --> gs["Game servers"]
+  gs -->|"pickups, trades, crafts"| inv["Inventory service · craft ran twice for about 4,000 accounts"]
+  inv -->|"UPDATE item quantity in place"| items[("Item rows · final quantity only")]
+  gs --> match["Matchmaking service"]
+  team["Inventory team · which accounts were hit?"] -.->|"no sequence kept"| items
+  staging["Staging environment · cannot reproduce a player"] -.->|"no sequence kept"| items`,
+
+  "event-sourcing-4": `flowchart TD
+  adjusters["Adjusters · how did this claim reach its status?"] --> app["Claims platform"]
+  app -->|"UPDATE status · submitted, assigned, estimated, approved, paid"| claims[("Claims table · current status and payout only")]
+  night["Nightly update job"] -->|"overwrites previous values, no trace"| claims
+  claims --> pay["Payments system"]
+  legal["Legal team · recompute 18 months of payouts under a corrected rule"] -.->|"only final numbers survive"| claims
+  app --> docs[("Photo and document store")]`,
+
+  "event-sourcing-5": `flowchart TD
+  sites["42 warehouse sites"] -->|"receipts, picks, cycle counts, damage write-offs"| stock["Stock service"]
+  stock -->|"increment or decrement on_hand in place · 3 million updates/day"| onhand[("on_hand table · per SKU per site")]
+  deploy["Bad deploy · double-decremented for 90 min"] -.-> stock
+  onhand -.->|"wrong counts"| recount["Physical recount at 11 sites"]
+  finance["Finance · on hand at midnight, each of the last 90 days?"] -.->|"nobody can produce it"| onhand
+  stock --> orders["Order routing service"]`,
+
+  "database-per-service-1": `flowchart TD
+  clients["Web and mobile clients"] --> gw["API gateway"]
+  gw --> orders["Orders service"]
+  gw --> cust["Customers service"]
+  gw --> other["Four other services · billing, shipping, catalog, notifications"]
+  orders -->|"shared credentials"| pg[("One Postgres instance · every table, no owner")]
+  cust -->|"shared credentials"| pg
+  other -->|"SELECT and UPDATE any table · 4 services query orders directly"| pg
+  release["Thursday night joint release"] -.->|"one service's migration can break another"| pg`,
+
+  "database-per-service-2": `flowchart TD
+  viewers["Viewers"] --> catalog["Catalog service"]
+  catalog -->|"nested title metadata across eleven join tables"| sql[("Normalized catalog SQL tables")]
+  recs["Recommendations service"] -->|"own SQL joins"| sql
+  search["Search indexer"] -->|"own SQL joins"| sql
+  billing["Billing entitlement service"] -->|"own SQL joins"| sql
+  catalog -.->|"move blocked for a year"| doc[("Document store · planned")]`,
+
+  "database-per-service-3": `flowchart TD
+  driverapp["Driver app"] --> dsvc["Driver service · validation rules"]
+  riderapp["Rider app"] --> psvc["Pricing service"]
+  dsvc -->|"INSERT and UPDATE rights on every column"| table[("Shared drivers table · 1,200 rows with a status nobody allows")]
+  psvc -->|"writes directly, skips validation"| table
+  psvc --> surge[("Surge pricing cache")]
+  dsvc --> docs[("Driver documents store")]`,
+
+  "database-per-service-4": `flowchart TD
+  users["HR customers"] --> lb["Load balancer"]
+  lb --> login["Login service"]
+  lb --> payroll["Payroll service"]
+  lb --> others["Six other services"]
+  reporting["Reporting service · opened 400 connections"] -->|"same DB user, full rights on all schemas"| mysql[("One shared MySQL server · one connection limit for all")]
+  login -->|"starved of connections"| mysql
+  payroll -->|"migration locks a large table for 4 min, all 9 services down"| mysql
+  others -->|"same DB user, full rights on all schemas"| mysql
+  lb --> reporting`,
+
+  "database-per-service-5": `flowchart TD
+  advertisers["Advertisers"] --> campaign["Campaign service"]
+  campaign -->|"one write touches tables of all three teams"| db[("Shared ad database · campaign, targeting, billing tables")]
+  targeting["Targeting service · adds a required column"] -->|"schema change"| db
+  billing["Billing service"] -->|"SELECT star join across 7 tables of the other two teams"| db
+  bidder["Ad exchange bidder"] --> targeting
+  billing --> invoices[("Invoice PDF store")]`,
+
+  "change-data-capture-1": `flowchart TD
+  shoppers["Shoppers"] --> store["Storefront"]
+  store --> search[("Search index")]
+  store --> pickup["Store-pickup availability page"]
+  vendor["Vendor inventory app on Oracle · no source code, contract forbids changes"] -->|"inserts, updates, deletes"| oracle[("Oracle inventory DB")]
+  oracle -->|"CSV export at 2am · up to 18 h stale"| csv["Nightly CSV job"]
+  csv --> search
+  csv --> pickup
+  poll["last_modified polling job · added load, missed deleted items"] -.->|"tried and dropped"| oracle
+  store --> cache[("Product image cache")]`,
+
+  "change-data-capture-2": `flowchart TD
+  staff["Ward staff"] -->|"admissions, discharges, transfers"| emr["Clinical records product · contract bars any changes"]
+  emr --> sql[("SQL Server patient stay table")]
+  reload["Full reload job · every 30 min, 12 min per run"] -->|"reads the whole table, loads production"| sql
+  reload --> beds["Bed management dashboard · clinicians need status in 5 s"]
+  reload --> wh[("Analytics warehouse")]
+  clinicians["Clinicians"] --> beds
+  analysts["Analysts"] --> bi["BI reports"]
+  bi --> wh`,
+
+  "change-data-capture-3": `flowchart TD
+  channels["Branches and online banking"] --> mf["Mainframe core account app · one vendor release a year"]
+  mf --> db[("Core account DB")]
+  db -->|"nightly batch file"| batch["Batch file transfer · data up to 22 h old"]
+  batch --> fraud["Fraud scoring service · needs changes within 2 s"]
+  batch --> wh[("Data warehouse")]
+  batch -.->|"no feed yet"| search["New search service · needs the same freshness"]
+  cards["Card network"] --> fraud
+  mfteam["Mainframe team"] -.->|"publishing calls quoted at 14 months, rejected"| mf`,
+
+  "change-data-capture-4": `flowchart TD
+  planners["Planners"] --> erp["Licensed ERP suite · closed source, no triggers or schema changes allowed"]
+  erp --> pg[("ERP Postgres · work orders, bills of material")]
+  floor["Shop-floor display"] -->|"query every 60 s"| pg
+  portal["Supplier portal"] -->|"query every 60 s"| pg
+  ml["Demand model"] -->|"query every 60 s"| pg
+  pg -.->|"polling adds 30% load and never returns deleted rows"| floor
+  portal --> suppliers["Suppliers"]
+  ml --> fs[("Feature store")]`,
+
+  "change-data-capture-5": `flowchart TD
+  advertisers["Advertisers"] --> crm["In-house CRM · PHP, frozen until a replacement two years out"]
+  crm --> db[("CRM advertiser DB")]
+  poll["Timestamp polling job · every minute, never sees deleted rows"] -->|"rows with a newer timestamp"| db
+  poll --> fs[("Feature store · stale budget caps cost 40,000 dollars")]
+  fs --> serving["Ad serving · closed accounts keep serving"]
+  serving --> exchange["Ad exchanges"]
+  serving --> logs[("Impression log")]`,
+
+  "transactional-outbox-1": `flowchart TD
+  support["Support agents"] --> api["Refunds service"]
+  api -->|"1. commit refund row"| pg[("Refunds Postgres")]
+  api -->|"2. publish refund message · pod killed in between, 63 never sent"| broker[["Message broker"]]
+  broker --> settle["Settlement"]
+  broker --> notify["Notifications"]
+  broker --> acct["Accounting"]
+  api -.->|"publish succeeds, then the transaction rolls back"| broker
+  pg --> reports["Finance reports"]`,
+
+  "transactional-outbox-2": `flowchart TD
+  customers["Customers"] --> order["Order service · 900 orders/s"]
+  order -->|"1. save order"| mysql[("Orders MySQL")]
+  order -->|"2. publish order message"| broker[["Message broker · 90 s outage at dinner rush"]]
+  broker --> dispatch["Courier dispatch"]
+  broker --> terminal["Restaurant terminals · never saw 2,400 orders"]
+  order -.->|"two-phase commit tried · dropped to 120 orders/s"| broker
+  order --> pay["Payment provider"]`,
+
+  "transactional-outbox-3": `flowchart TD
+  retail["Retail stores and app"] --> act["Line activation service"]
+  act -->|"1. publish activation first"| broker[["Message broker"]]
+  act -->|"2. write 4 rows · fails about 200 times a day"| db[("Activation DB")]
+  broker --> prov["Provisioning"]
+  broker --> billing["Billing · charges for lines never activated"]
+  broker --> sms["SMS welcome"]
+  prov --> hlr[("Network subscriber register")]`,
+
+  "transactional-outbox-4": `flowchart TD
+  scanners["Package scanners"] --> lb["Load balancer"]
+  lb --> ship["Shipment service · autoscales down, instances terminated mid-request"]
+  ship -->|"1. update shipment row"| db[("Shipment DB")]
+  ship -->|"2. publish scan, retried in handler · 0.4% never sent, about 4,000 a day"| broker[["Message broker"]]
+  broker --> tracking["Customer tracking page"]
+  broker --> recon["Carrier reconciliation job"]
+  db --> reports["Operations reports"]`,
+
+  "transactional-outbox-5": `flowchart TD
+  subscribers["Subscribers"] --> apps["Web and TV apps"]
+  apps -->|"upgrade plan"| sub["Subscription service"]
+  sub -->|"1. commit plan row"| db[("Subscriptions DB")]
+  sub -->|"2. publish after commit · out of order under load, lost on crash"| broker[["Message broker"]]
+  broker --> ent["Entitlement service · 11 accounts disagree with stored plan"]
+  broker --> inv["Invoicing service"]
+  audit["Auditors"] -.-> db`,
+
+  "saga-1": `flowchart TD
+  customer["Customer app"] -->|"place order"| api["Order Service · one wrapping transaction around all three calls"]
+  api -->|"reserve items"| inv["Restaurant Inventory Service"]
+  api -->|"charge card"| pay["Payments Service"]
+  pay -->|"card charged, cannot be rolled back"| psp["Payment provider"]
+  api -->|"assign courier"| courier["Courier Dispatch Service"]
+  api --> odb[("Orders Postgres")]
+  inv --> idb[("Inventory Postgres")]
+  pay --> pdb[("Payments Postgres")]
+  courier --> cdb[("Courier Postgres")]
+  api -.->|"about 900 orders a day charged with no courier"| support["Support team · fixes orders by hand"]
+  menu["Menu API"] --> cache[("Menu Cache")]
+  customer --> menu`,
+
+  "saga-2": `flowchart TD
+  store["Retail store and carrier app"] -->|"activate line"| act["Activation code · calls four services in a row over HTTP"]
+  act -->|"1. create account"| acct["Customer Account Service"]
+  act -->|"2. assign phone number"| num["Number Inventory Service"]
+  act -->|"3. turn line on · 8 to 40 s"| net["Network Provisioning Service"]
+  act -->|"4. start monthly charge"| bill["Billing Service"]
+  acct --> adb[("Account DB")]
+  num --> ndb[("Number DB")]
+  net --> core["Network core"]
+  bill --> bdb[("Billing DB")]
+  act -.->|"gives up wherever it breaks"| half["Half-activated lines"]
+  store --> plans["Plan Catalog API"]
+  plans --> pcache[("Plan Cache")]`,
+
+  "saga-3": `flowchart TD
+  agent["Agent portal"] -->|"one API call: issue policy"| api["Policy API · expects one atomic write"]
+  api --> uw["Underwriting Service"]
+  api --> doc["Document Service"]
+  api --> pay["Payments Service"]
+  api --> claims["Claims Service"]
+  uw --> uwdb[("Underwriting DB · accepted risk")]
+  doc --> docdb[("Contract store · signed contract")]
+  pay --> paydb[("Payments DB · first premium")]
+  claims --> cdb[("Claims DB · coverage record")]
+  api -.->|"two-phase commit not enabled"| dba["DBA team"]
+  pay -.->|"premium rejected, policy stays live"| live["Live policy with no premium"]
+  agent --> quote["Quote Service"]
+  quote --> rates[("Rate tables")]`,
+
+  "saga-4": `flowchart TD
+  shipper["Shipper portal"] -->|"book shipment"| api["Booking API · calls services one after another"]
+  api -->|"hold truck slot"| cap["Capacity Service · region A"]
+  api -->|"file paperwork · 80 to 200 ms away"| customs["Customs Service · region B"]
+  api -->|"create receivable · 80 to 200 ms away"| inv["Invoicing Service · region C"]
+  cap --> capdb[("Capacity DB")]
+  customs -->|"file with broker"| broker["Customs broker"]
+  customs --> cudb[("Customs DB")]
+  inv --> ardb[("Accounts receivable DB")]
+  customs -.->|"about 2 percent of bookings fail here"| api
+  capdb -.->|"truck slot held forever, no invoice"| stuck["Stuck truck slots"]
+  shipper --> track["Tracking Service"]
+  track --> gps[("GPS ping store")]`,
+
+  "saga-5": `flowchart TD
+  doctor["Referring doctor"] -->|"create referral"| ref["Referral API · nothing holds the four writes together since the split"]
+  ref --> sched["Scheduling Service"]
+  ref --> clinic["Specialist Clinic Service"]
+  ref --> ben["Benefits Service"]
+  ref --> rec["Records Service"]
+  sched --> sdb[("Scheduling DB")]
+  clinic --> cdb[("Clinic DB · slot held")]
+  ben --> bdb[("Benefits DB")]
+  rec --> rdb[("Records DB")]
+  ref -.->|"fails halfway about 40 times a week"| orphan["Clinic slot held for a patient with no appointment"]
+  monolith["Old monolith DB · one transaction, retired"] -.-> ref
+  doctor --> directory["Provider directory"]`,
+
+  "compensating-transaction-1": `flowchart TD
+  traveler["Traveler app"] -->|"book trip"| orch["Booking orchestrator · runs steps in order"]
+  orch -->|"1. book flight"| flight["Flight supplier API"]
+  orch -->|"2. book rental car"| car["Car supplier API"]
+  orch -->|"3. book hotel"| hotel["Hotel supplier API"]
+  hotel -.->|"fails after retries are exhausted"| orch
+  orch --> log[("Workflow log")]
+  log -->|"read by hand, about 30 times a week"| oncall["On-call engineer"]
+  oncall -->|"cancel by hand · 15 percent fee"| flight
+  oncall -->|"cancel by hand · deposit back, booking fee kept"| car
+  orch --> pay["Payments Service"]
+  traveler --> search["Trip Search Service"]`,
+
+  "compensating-transaction-2": `flowchart TD
+  cycle["Monthly pay cycle workflow"] -->|"send payments"| ach["Bank ACH file · 4,200 payments sent"]
+  cycle -->|"deduct premiums"| benefits["Benefits vendor"]
+  cycle -->|"step 4 · file taxes"| tax["Tax filing vendor"]
+  tax -.->|"rejects the batch"| cycle
+  cycle -.->|"later steps"| k401["401k provider"]
+  cycle -.->|"later steps"| gl["General ledger"]
+  cycle -.->|"later steps"| email["Email notifier"]
+  cycle -.->|"stops, nothing reversed"| finance["Finance team · 2 days reversing by hand"]
+  finance -->|"ACH return entries by hand"| ach
+  finance -->|"adjusting credits by hand"| benefits
+  hr["HR system"] -->|"employee changes"| cycle`,
+
+  "compensating-transaction-3": `flowchart TD
+  orders["Order Service"] --> flow["Fulfillment workflow"]
+  flow -->|"1. pick · stock decremented"| stock[("Stock counts DB · also changed by other orders")]
+  flow -->|"2. pack · pallet staged"| floor[["Floor crew task queue"]]
+  flow -->|"3. buy label · $8.40"| carrierapi["Carrier label API"]
+  flow -->|"4. hand off to carrier"| handoff["Carrier handoff"]
+  handoff -.->|"address undeliverable · about 700 a day"| flow
+  flow -.->|"gives up, nothing undone · about $5,000 lost a week"| loss["Paid labels, missing stock, staged pallets"]
+  slotting["Slotting Service"] --> stock
+  flow --> tracking[("Shipment tracking DB")]`,
+
+  "compensating-transaction-4": `flowchart TD
+  player["Player"] -->|"buy bundle"| purchase["Bundle purchase process · five steps"]
+  purchase -->|"charge card · settled"| pay["Payments Service"]
+  purchase -->|"grant base game"| ent["Entitlement Service"]
+  purchase -->|"credit 500 in-game currency"| wallet[("Currency balance · player may have spent it")]
+  purchase -->|"grant two add-ons"| ent
+  ent -.->|"add-on 2 rejected · region restriction"| purchase
+  purchase -->|"post achievement"| achievements["Achievement Service"]
+  other["Other purchases"] --> wallet
+  purchase -.->|"gives up, finished steps left in place"| partial["Charged player with a partial bundle"]
+  player --> catalog["Store catalog"]`,
+
+  "compensating-transaction-5": `flowchart TD
+  officer["Loan officer"] --> flow["Mortgage approval flow"]
+  flow -->|"1. pull credit"| credit["Credit bureau"]
+  flow -->|"2. order appraisal · $600"| appraisal["Appraisal vendor"]
+  flow -->|"3. lock rate · held 45 days"| desk["Funding desk API"]
+  flow -->|"4. reserve funds"| funds["Funds reservation service"]
+  funds -.->|"fails after all retries · about 120 files a month"| flow
+  flow -.->|"dead files copied out"| sheet["Ops spreadsheet"]
+  sheet -->|"release rate lock by hand · misses 1 in 8"| desk
+  sheet -->|"cancel appraisal by hand"| appraisal
+  flow --> loanfile[("Loan file DB")]
+  officer --> uploads["Document upload portal"]`,
+
 };
 
 // Mermaid source for the "solved" diagram of a quiz scenario, keyed by scenario
@@ -2007,5 +2506,1317 @@ const SOLVED_SCENARIO_DIAGRAMS = {
   linkStyle 9 stroke:#16a34a,stroke-width:3px;
   linkStyle 10 stroke:#16a34a,stroke-width:3px;
   linkStyle 4 stroke:#dc2626,stroke-width:3px;`,
+
+  "cache-aside-1": `flowchart TD
+  shoppers["Shoppers · 12,000 page views/s, 92% land on the same 4,000 SKUs"] --> lb["Load Balancer"]
+  lb --> web["Product Page Service"]
+  web -->|"on a miss only, read row by SKU"| db[("Product DB · CPU freed from repeated lookups")]
+  admin["Admin Tool"] -->|"1. update the price row first"| db
+  web --> search["Search Service"]
+  web -.-> cdn["CDN · product images"]
+  web -->|"GET product:SKU"| cache[("Product Cache · entries expire after a few minutes")]
+  web -->|"on a miss, write the row with an expiration"| cache
+  admin -->|"2. delete product:SKU so the next read gets the new price"| cache
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class cache,db added;
+  linkStyle 2 stroke:#16a34a,stroke-width:3px;
+  linkStyle 3 stroke:#16a34a,stroke-width:3px;
+  linkStyle 6 stroke:#16a34a,stroke-width:3px;
+  linkStyle 7 stroke:#16a34a,stroke-width:3px;
+  linkStyle 8 stroke:#16a34a,stroke-width:3px;`,
+
+  "cache-aside-2": `flowchart TD
+  clients["Game clients · 10 players per match"] --> match["Match Service"]
+  match -->|"on a miss only, read row by item id"| db[("Item Definitions DB · bill no longer grows with match volume")]
+  designers["Designer Tool"] -->|"1. update the row first"| db
+  match --> mm["Matchmaking Service"]
+  match --> history[("Match History DB")]
+  match -->|"GET item:id"| cache[("Item Cache · whole table fits in a few hundred MB")]
+  match -->|"on a miss, write the row with an expiration"| cache
+  designers -->|"2. delete item:id so the old definition stops being served"| cache
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class cache,db added;
+  linkStyle 1 stroke:#16a34a,stroke-width:3px;
+  linkStyle 2 stroke:#16a34a,stroke-width:3px;
+  linkStyle 5 stroke:#16a34a,stroke-width:3px;
+  linkStyle 6 stroke:#16a34a,stroke-width:3px;
+  linkStyle 7 stroke:#16a34a,stroke-width:3px;`,
+
+  "cache-aside-3": `flowchart TD
+  exchange["Ad exchange · 200,000 bid requests/s"] -->|"80 ms total to respond"| bid["Bidding Service"]
+  bid -->|"on a miss only, read targeting by campaign id"| db[("Campaign DB · 3,500 active campaigns")]
+  advertisers["Advertiser Console"] -->|"a few hundred edits/hour"| db
+  bid --> model["Bid Pricing Model"]
+  bid -.->|"no more timeouts from 40 ms lookups"| exchange
+  bid --> events[["Bid Events Stream"]]
+  bid -->|"GET campaign:id · under 1 ms"| cache[("Targeting Cache · entries expire after 60 s")]
+  bid -->|"on a miss, write the record with a 60 s expiration"| cache
+  advertisers -->|"after updating the row, delete campaign:id"| cache
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class cache added;
+  linkStyle 1 stroke:#16a34a,stroke-width:3px;
+  linkStyle 6 stroke:#16a34a,stroke-width:3px;
+  linkStyle 7 stroke:#16a34a,stroke-width:3px;
+  linkStyle 8 stroke:#16a34a,stroke-width:3px;
+  linkStyle 4 stroke:#dc2626,stroke-width:3px;`,
+
+  "cache-aside-4": `flowchart TD
+  desk["Front desk staff · repeat checks answered in milliseconds"] --> billing["Clinic Billing System"]
+  billing -->|"on a miss only · about 14,000 paid calls/day"| payer["Payer Eligibility API · external"]
+  billing --> db[("Billing DB")]
+  billing --> sched["Scheduling Service"]
+  billing -->|"GET eligibility:patient:payer"| cache[("Eligibility Cache · entries expire at the end of the day")]
+  billing -->|"on a miss, save the answer until the end of the day"| cache
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class cache,desk added;
+  linkStyle 1 stroke:#16a34a,stroke-width:3px;
+  linkStyle 4 stroke:#16a34a,stroke-width:3px;
+  linkStyle 5 stroke:#16a34a,stroke-width:3px;`,
+
+  "cache-aside-5": `flowchart TD
+  apps["Streaming apps · 30,000 reads/s, 5% of titles get 80% of reads"] --> gw["API Gateway"]
+  gw --> catalog["Catalog Service"]
+  catalog -->|"on a miss only, look up by title id"| db[("Catalog DB · connections freed")]
+  db -.-> replicas[("Read Replicas · already maxed")]
+  content["Content Team Tool"] -->|"artwork and description updates"| db
+  catalog --> rec["Recommendations Service"]
+  catalog -->|"GET title:id"| cache[("Title Cache · entries expire after 2 min")]
+  catalog -->|"on a miss, write the row with an expiration"| cache
+  content -->|"after updating the row, delete title:id"| cache
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class cache,db added;
+  linkStyle 2 stroke:#16a34a,stroke-width:3px;
+  linkStyle 6 stroke:#16a34a,stroke-width:3px;
+  linkStyle 7 stroke:#16a34a,stroke-width:3px;
+  linkStyle 8 stroke:#16a34a,stroke-width:3px;`,
+
+  "sharding-1": `flowchart TD
+  merchants["Merchant card terminals"] --> auth["Authorization Service"]
+  auth -->|"38,000 inserts/s at peak · nearly every query scoped to one merchant"| pg[("Single PostgreSQL primary · retired")]
+  pg -.-> replica[("Read Replicas · no help for writes or disk")]
+  auth --> fraud["Fraud Scoring"]
+  dashboard["Merchant Dashboard"] --> pg
+  auth -->|"merchant id"| router["Shard Router · merchant id to shard lookup"]
+  dashboard -->|"merchant id"| router
+  router --> s1[("Shard 1 · PostgreSQL")]
+  router --> s2[("Shard 2 · PostgreSQL")]
+  router -->|"add shards as volume grows"| s3[("Shard N · new machine")]
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class router,s1,s2,s3 added;
+  classDef removed stroke:#dc2626,stroke-width:3px,stroke-dasharray:4 4;
+  class pg,replica removed;
+  linkStyle 5 stroke:#16a34a,stroke-width:3px;
+  linkStyle 6 stroke:#16a34a,stroke-width:3px;
+  linkStyle 7 stroke:#16a34a,stroke-width:3px;
+  linkStyle 8 stroke:#16a34a,stroke-width:3px;
+  linkStyle 9 stroke:#16a34a,stroke-width:3px;
+  linkStyle 1 stroke:#dc2626,stroke-width:3px;
+  linkStyle 2 stroke:#dc2626,stroke-width:3px;
+  linkStyle 4 stroke:#dc2626,stroke-width:3px;`,
+
+  "sharding-2": `flowchart TD
+  devices["2.4 million devices"] -->|"60,000 inserts/s"| ingest["Ingest Service"]
+  ingest --> tsdb[("Single time-series DB server · retired")]
+  dash["Plant Dashboards · one device's readings per query"] --> tsdb
+  ingest --> alerts["Alerting Service"]
+  ingest -.-> archive[("Cold Archive · last year's readings")]
+  ingest -->|"device id"| router["Shard Router · hash of device id"]
+  dash -->|"device id"| router
+  router --> s1[("Shard 1 · time-series DB")]
+  router --> s2[("Shard 2 · time-series DB")]
+  router -->|"add shards as devices are added"| s3[("Shard N · new server")]
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class router,s1,s2,s3 added;
+  classDef removed stroke:#dc2626,stroke-width:3px,stroke-dasharray:4 4;
+  class tsdb removed;
+  linkStyle 5 stroke:#16a34a,stroke-width:3px;
+  linkStyle 6 stroke:#16a34a,stroke-width:3px;
+  linkStyle 7 stroke:#16a34a,stroke-width:3px;
+  linkStyle 8 stroke:#16a34a,stroke-width:3px;
+  linkStyle 9 stroke:#16a34a,stroke-width:3px;
+  linkStyle 1 stroke:#dc2626,stroke-width:3px;
+  linkStyle 2 stroke:#dc2626,stroke-width:3px;`,
+
+  "sharding-3": `flowchart TD
+  users["HR users at 14,000 companies"] --> app["HR App"]
+  imports["Bulk imports from 3 enterprise customers"] --> app
+  app -->|"every query carries a company id"| mysql[("Shared shard · the small companies")]
+  mysql -->|"backup per shard, a fraction of the 8 TB"| backup[("Backup Store")]
+  app --> login["Login Service"]
+  app -->|"company id"| shardmap["Shard Map · company id to server lookup"]
+  shardmap -->|"small companies"| mysql
+  shardmap --> e1[("Enterprise A shard · own server")]
+  shardmap --> e2[("Enterprise B shard · own server")]
+  shardmap -->|"move a big tenant by changing its map entry"| e3[("Enterprise C shard · can move to new hardware")]
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class shardmap,e1,e2,e3,mysql added;
+  linkStyle 3 stroke:#16a34a,stroke-width:3px;
+  linkStyle 5 stroke:#16a34a,stroke-width:3px;
+  linkStyle 6 stroke:#16a34a,stroke-width:3px;
+  linkStyle 7 stroke:#16a34a,stroke-width:3px;
+  linkStyle 8 stroke:#16a34a,stroke-width:3px;
+  linkStyle 9 stroke:#16a34a,stroke-width:3px;
+  linkStyle 2 stroke:#dc2626,stroke-width:3px;`,
+
+  "sharding-4": `flowchart TD
+  players["90 million player accounts"] --> gs["Game Servers"]
+  gs -->|"inventory read or write for one player · p99 write 340 ms"| docdb[("Single document DB cluster · retired")]
+  docdb -.-> secondary[("Secondary · failover")]
+  gs --> match["Matchmaking Service"]
+  shop["In-game Store"] --> gs
+  gs -->|"player id"| router["Shard Router · hash of player id"]
+  router --> s1[("Shard 1 · primary and secondary")]
+  router --> s2[("Shard 2 · primary and secondary")]
+  router -->|"add shards before storage doubles"| s3[("Shard N · new servers")]
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class router,s1,s2,s3 added;
+  classDef removed stroke:#dc2626,stroke-width:3px,stroke-dasharray:4 4;
+  class docdb,secondary removed;
+  linkStyle 5 stroke:#16a34a,stroke-width:3px;
+  linkStyle 6 stroke:#16a34a,stroke-width:3px;
+  linkStyle 7 stroke:#16a34a,stroke-width:3px;
+  linkStyle 8 stroke:#16a34a,stroke-width:3px;
+  linkStyle 1 stroke:#dc2626,stroke-width:3px;
+  linkStyle 2 stroke:#dc2626,stroke-width:3px;`,
+
+  "sharding-5": `flowchart TD
+  scanners["Parcel scanners"] -->|"scan events"| ingest["Tracking Ingest Service"]
+  ingest --> db[("Single tracking DB · retired")]
+  web["Customer tracking page · one tracking number at a time"] --> api["Tracking API"]
+  api --> db
+  db -.->|"nightly vacuum runs into the morning peak"| vacuum["Vacuum Job"]
+  api --> notify["Notification Service"]
+  ingest -->|"tracking number"| router["Shard Router · tracking number to logical shard, logical shard to server"]
+  api -->|"tracking number"| router
+  router --> s1[("Server 1 · logical shards 0 to 511")]
+  router --> s2[("Server 2 · logical shards 512 to 1023")]
+  router -->|"move a logical shard by updating the map, queries unchanged"| s3[("New Server · takes logical shards later")]
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class router,s1,s2,s3 added;
+  classDef removed stroke:#dc2626,stroke-width:3px,stroke-dasharray:4 4;
+  class db,vacuum removed;
+  linkStyle 6 stroke:#16a34a,stroke-width:3px;
+  linkStyle 7 stroke:#16a34a,stroke-width:3px;
+  linkStyle 8 stroke:#16a34a,stroke-width:3px;
+  linkStyle 9 stroke:#16a34a,stroke-width:3px;
+  linkStyle 10 stroke:#16a34a,stroke-width:3px;
+  linkStyle 1 stroke:#dc2626,stroke-width:3px;
+  linkStyle 3 stroke:#dc2626,stroke-width:3px;
+  linkStyle 4 stroke:#dc2626,stroke-width:3px;`,
+
+  "materialized-view-1": `flowchart TD
+  nurses["Charge nurses · about 200 opens/hour"] --> dash["Ward Dashboard"]
+  dash -->|"join 7 tables, group by over 40 million rows · 38 s"| clin[("Clinical DB · normalized tables, still the record of truth")]
+  ehr["Clinical system"] -->|"writes admissions, transfers, discharges"| clin
+  dash --> sso["Hospital Sign-in"]
+  dash -->|"read one row per ward · milliseconds"| view[("Ward Stats table · occupancy, length of stay, readmissions for 90 days")]
+  refresh["Refresh Job · every 15 min"] -->|"runs the 7-table query once"| clin
+  refresh -->|"rewrites rows, can be rebuilt from clinical tables any time"| view
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class view,refresh added;
+  linkStyle 4 stroke:#16a34a,stroke-width:3px;
+  linkStyle 5 stroke:#16a34a,stroke-width:3px;
+  linkStyle 6 stroke:#16a34a,stroke-width:3px;
+  linkStyle 1 stroke:#dc2626,stroke-width:3px;`,
+
+  "materialized-view-2": `flowchart TD
+  advertisers["Advertisers · reload the page constantly"] --> portal["Advertiser Portal"]
+  portal -->|"scan 900 million rows per advertiser · 22 s"| imp[("Impression table · raw rows audited by finance")]
+  portal -->|"join"| rates[("Campaigns and Billing Rates DB")]
+  adservers["Ad Servers"] -->|"append impressions"| imp
+  finance["Finance Audit"] --> imp
+  portal -->|"read by advertiser id · under 1 s"| view[("Campaign Daily Performance table · spend, impressions, clicks, cost per click")]
+  refresh["Refresh Job · every 10 min"] -->|"reads new impressions"| imp
+  refresh -->|"joins"| rates
+  refresh -->|"writes one row per campaign per day"| view
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class view,refresh added;
+  linkStyle 5 stroke:#16a34a,stroke-width:3px;
+  linkStyle 6 stroke:#16a34a,stroke-width:3px;
+  linkStyle 7 stroke:#16a34a,stroke-width:3px;
+  linkStyle 8 stroke:#16a34a,stroke-width:3px;
+  linkStyle 1 stroke:#dc2626,stroke-width:3px;
+  linkStyle 2 stroke:#dc2626,stroke-width:3px;`,
+
+  "materialized-view-3": `flowchart TD
+  creators["Creators · load the page many times a day"] --> page["Channel Analytics Page"]
+  page -->|"join and aggregate 28 days · 45 s, page times out"| events[("View Events table")]
+  page --> subs[("Subscriptions table")]
+  page --> meta[("Video Metadata table")]
+  player["Video Player"] -->|"view events"| events
+  page -.-> cdn["CDN · thumbnails"]
+  page -->|"read one row per channel · no timeout"| view[("Channel Summary table · watch minutes, subscribers, top 10 videos")]
+  refresh["Refresh Job · hourly"] --> events
+  refresh --> subs
+  refresh --> meta
+  refresh -->|"writes 28-day figures per channel"| view
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class view,refresh added;
+  linkStyle 6 stroke:#16a34a,stroke-width:3px;
+  linkStyle 7 stroke:#16a34a,stroke-width:3px;
+  linkStyle 8 stroke:#16a34a,stroke-width:3px;
+  linkStyle 9 stroke:#16a34a,stroke-width:3px;
+  linkStyle 10 stroke:#16a34a,stroke-width:3px;
+  linkStyle 1 stroke:#dc2626,stroke-width:3px;
+  linkStyle 2 stroke:#dc2626,stroke-width:3px;
+  linkStyle 3 stroke:#dc2626,stroke-width:3px;`,
+
+  "materialized-view-4": `flowchart TD
+  managers["Relationship managers · about 3,000 overviews/day"] --> overview["Customer Overview App"]
+  overview -->|"query 5 tables in different schemas · 14 s"| core[("Core Banking DB · checking, savings, loans, cards")]
+  corebank["Core banking system"] -->|"owns and writes the source tables"| core
+  overview --> kyc["KYC Service"]
+  overview -->|"read one row per customer"| view[("Customer Exposure table · balances, total exposure, 12-month average")]
+  nightly["Overnight Rebuild Job"] -->|"reads the core tables"| core
+  nightly -->|"drops and rebuilds every row"| view
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class view,nightly added;
+  linkStyle 4 stroke:#16a34a,stroke-width:3px;
+  linkStyle 5 stroke:#16a34a,stroke-width:3px;
+  linkStyle 6 stroke:#16a34a,stroke-width:3px;
+  linkStyle 1 stroke:#dc2626,stroke-width:3px;`,
+
+  "materialized-view-5": `flowchart TD
+  shoppers["Shoppers · 4,000 category page hits/min"] --> lb["Load Balancer"]
+  lb --> browse["Category Browse Service"]
+  browse -->|"join 30 million rows · 18 s per category"| products[("Products DB")]
+  browse --> prices[("Prices DB")]
+  browse --> stock[("Warehouse Stock DB · changes constantly")]
+  wms["Warehouse System"] -->|"stock updates"| stock
+  browse -.-> images["Image CDN"]
+  browse -->|"read one row per category"| view[("Category Summary table · 8,000 rows · item count, lowest price, in-stock count")]
+  refresh["Refresh Job · every 5 min"] --> products
+  refresh --> prices
+  refresh --> stock
+  refresh -->|"rewrites category rows"| view
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class view,refresh added;
+  linkStyle 7 stroke:#16a34a,stroke-width:3px;
+  linkStyle 8 stroke:#16a34a,stroke-width:3px;
+  linkStyle 9 stroke:#16a34a,stroke-width:3px;
+  linkStyle 10 stroke:#16a34a,stroke-width:3px;
+  linkStyle 11 stroke:#16a34a,stroke-width:3px;
+  linkStyle 2 stroke:#dc2626,stroke-width:3px;
+  linkStyle 3 stroke:#dc2626,stroke-width:3px;
+  linkStyle 4 stroke:#dc2626,stroke-width:3px;`,
+
+  "index-table-1": `flowchart TD
+  agents["Support agents"] -->|"all orders for a customer email"| support["Support tool"]
+  customers["Customers"] -->|"900 orders/s"| orders["Order service"]
+  orders -->|"put by order ID"| kv[("Order store · key is order ID · 400 million items · no other query")]
+  support -.->|"no more full scans"| kv
+  orders --> pay["Payment service"]
+  kv -.-> cache[("Order status cache")]
+  orders -->|"order written event"| queue[["Index update queue"]]
+  queue --> worker["Index worker · keeps up with 900 writes/s · 1 to 2 s behind"]
+  worker -->|"put email plus order ID"| idx[("Email index table · key is email plus order ID")]
+  support -->|"read by email, gets order IDs"| idx
+  support -->|"read each order by ID"| kv
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class queue,worker,idx added;
+  linkStyle 6 stroke:#16a34a,stroke-width:3px;
+  linkStyle 7 stroke:#16a34a,stroke-width:3px;
+  linkStyle 8 stroke:#16a34a,stroke-width:3px;
+  linkStyle 9 stroke:#16a34a,stroke-width:3px;
+  linkStyle 10 stroke:#16a34a,stroke-width:3px;
+  linkStyle 3 stroke:#dc2626,stroke-width:3px;`,
+
+  "index-table-2": `flowchart TD
+  riders["Rider app"] --> api["Trip API"]
+  api -->|"find nearby driver"| match["Matching service"]
+  match -->|"read by driver ID"| drivers[("Driver store · partitioned by hash of driver ID · 64 partitions · no secondary index")]
+  onboard["Driver onboarding"] -->|"write driver record"| drivers
+  compliance["Compliance tool"] -.->|"no more fan-out to 64 partitions"| drivers
+  match --> geo[("Driver location cache")]
+  onboard -->|"driver changed event"| queue[["Driver change queue"]]
+  queue --> worker["Index worker"]
+  worker -->|"put license state plus driver ID"| idx[("License state index table · key is state plus driver ID")]
+  compliance -->|"read one key range · answers in seconds"| idx
+  compliance -->|"read matching drivers by ID"| drivers
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class queue,worker,idx added;
+  linkStyle 6 stroke:#16a34a,stroke-width:3px;
+  linkStyle 7 stroke:#16a34a,stroke-width:3px;
+  linkStyle 8 stroke:#16a34a,stroke-width:3px;
+  linkStyle 9 stroke:#16a34a,stroke-width:3px;
+  linkStyle 10 stroke:#16a34a,stroke-width:3px;
+  linkStyle 4 stroke:#dc2626,stroke-width:3px;`,
+
+  "index-table-3": `flowchart TD
+  listeners["Listener app"] --> api["Catalog API"]
+  api -->|"read album by album ID"| store[("Catalog store · wide-column · key is album ID · 120 million track rows")]
+  api -.->|"no more scans of 120 million rows"| store
+  labels["Label ingest job"] -->|"catalog changes a few times a day"| store
+  api --> art["Cover art CDN"]
+  api --> plays[("Play count store")]
+  labels -->|"after each catalog change"| job["Index builder job · some lag is fine"]
+  job -->|"put performer plus track ID, with track title and album ID"| idx[("Performer index table · key is performer plus track ID")]
+  api -->|"tracks featuring a performer · 5,000/min · one key range read"| idx
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class job,idx added;
+  linkStyle 6 stroke:#16a34a,stroke-width:3px;
+  linkStyle 7 stroke:#16a34a,stroke-width:3px;
+  linkStyle 8 stroke:#16a34a,stroke-width:3px;
+  linkStyle 2 stroke:#dc2626,stroke-width:3px;`,
+
+  "index-table-4": `flowchart TD
+  billing["Billing staff"] -->|"has insurance member number"| billapp["Billing app"]
+  clinic["Clinic staff"] --> ehr["Records service"]
+  ehr -->|"read and write by patient ID"| docs[("Patient document store · key is patient ID · 12 million documents · no secondary index")]
+  billapp -.->|"no more scans"| docs
+  billapp --> claims[("Claims DB")]
+  ehr --> audit[("Access audit log")]
+  ehr -->|"patient saved event"| queue[["Patient change queue"]]
+  queue --> worker["Index worker · new patients findable a few seconds later"]
+  worker -->|"put member number to patient ID"| idx[("Member number index table · key is member number · one row each")]
+  billapp -->|"look up member number · answers right away"| idx
+  billapp -->|"read patient by patient ID"| docs
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class queue,worker,idx added;
+  linkStyle 6 stroke:#16a34a,stroke-width:3px;
+  linkStyle 7 stroke:#16a34a,stroke-width:3px;
+  linkStyle 8 stroke:#16a34a,stroke-width:3px;
+  linkStyle 9 stroke:#16a34a,stroke-width:3px;
+  linkStyle 10 stroke:#16a34a,stroke-width:3px;
+  linkStyle 3 stroke:#dc2626,stroke-width:3px;`,
+
+  "index-table-5": `flowchart TD
+  staff["Floor staff handheld scanner"] -->|"scan pallet barcode"| inv["Inventory service"]
+  inv -.->|"no more walking every item record"| items[("Item store · key is SKU · no other query")]
+  erp["Purchasing system"] -->|"item changes about twice a day"| items
+  inv --> locs[("Bin location DB")]
+  inv --> picks["Pick list service"]
+  erp -->|"change notice"| job["Index builder job · some lag is fine"]
+  job -->|"reads changed items"| items
+  job -->|"put barcode to SKU · 11 million rows"| idx[("Pallet barcode index table · key is barcode")]
+  inv -->|"barcode to SKU in one read"| idx
+  inv -->|"read item by SKU"| items
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class job,idx added;
+  linkStyle 5 stroke:#16a34a,stroke-width:3px;
+  linkStyle 6 stroke:#16a34a,stroke-width:3px;
+  linkStyle 7 stroke:#16a34a,stroke-width:3px;
+  linkStyle 8 stroke:#16a34a,stroke-width:3px;
+  linkStyle 9 stroke:#16a34a,stroke-width:3px;
+  linkStyle 1 stroke:#dc2626,stroke-width:3px;`,
+
+  "cqrs-1": `flowchart TD
+  traders["Trader app"] -->|"place order · 400 writes/s"| oms["Order command side · rules classes only, display fields gone"]
+  blotter["Blotter screens"] -.->|"no more reads through the rules classes"| oms
+  oms --> db[("Orders DB · write shape only")]
+  mkt["Market data feed"] -->|"prices"| oms
+  oms -->|"route order"| exch["Exchange gateway"]
+  oms -->|"publish order placed, filled, cancelled"| bus[["Order event stream"]]
+  bus --> proj["Blotter projector · builds one table per screen"]
+  proj --> readdb[("Blotter read store · denormalized per screen · a few seconds behind")]
+  blotter -->|"60,000 reads/s · one simple select"| query["Blotter query service"]
+  query --> readdb
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class oms,db,bus,proj,readdb,query added;
+  linkStyle 5 stroke:#16a34a,stroke-width:3px;
+  linkStyle 6 stroke:#16a34a,stroke-width:3px;
+  linkStyle 7 stroke:#16a34a,stroke-width:3px;
+  linkStyle 8 stroke:#16a34a,stroke-width:3px;
+  linkStyle 9 stroke:#16a34a,stroke-width:3px;
+  linkStyle 1 stroke:#dc2626,stroke-width:3px;`,
+
+  "cqrs-2": `flowchart TD
+  adjusters["Adjusters"] -->|"claim updates · 30/s"| claims["Adjudication side · rules objects only · scales for 30 updates/s"]
+  customers["Customer status page"] -.->|"no more full object graph loads"| claims
+  claims -->|"loads full object graph for adjudication only"| db[("Claims DB · indexes for adjudication")]
+  claims --> docs[("Claim documents store")]
+  claims -->|"approved payout"| pay["Payments system"]
+  claims -->|"publish claim stage changed"| bus[["Claim event stream"]]
+  bus --> proj["Status projector"]
+  proj -->|"claim number, stage, expected payout"| statusdb[("Status read store · own indexes")]
+  customers -->|"12,000 views/s · one small row"| statusapi["Status query API · scales on its own"]
+  statusapi --> statusdb
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class claims,db,bus,proj,statusdb,statusapi added;
+  linkStyle 2 stroke:#16a34a,stroke-width:3px;
+  linkStyle 5 stroke:#16a34a,stroke-width:3px;
+  linkStyle 6 stroke:#16a34a,stroke-width:3px;
+  linkStyle 7 stroke:#16a34a,stroke-width:3px;
+  linkStyle 8 stroke:#16a34a,stroke-width:3px;
+  linkStyle 9 stroke:#16a34a,stroke-width:3px;
+  linkStyle 1 stroke:#dc2626,stroke-width:3px;`,
+
+  "cqrs-3": `flowchart TD
+  guests["Guest web and app"] -->|"book · 200/s"| svc["Booking command model · booking rules only, no display fields"]
+  guests -.->|"reads no longer go through the booking model"| svc
+  svc --> db[("Reservations DB")]
+  svc -->|"rates"| rates[("Rate plan cache")]
+  svc -->|"confirmation email"| mail["Email service"]
+  svc -->|"publish booking made, changed, cancelled"| bus[["Booking event stream"]]
+  bus --> proj["Read model projector · a couple of seconds behind"]
+  proj --> readdb[("Read store tuned for availability and reservation lists")]
+  guests -->|"80,000 reads/s"| query["Search and list query service"]
+  query --> readdb
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class svc,bus,proj,readdb,query added;
+  linkStyle 5 stroke:#16a34a,stroke-width:3px;
+  linkStyle 6 stroke:#16a34a,stroke-width:3px;
+  linkStyle 7 stroke:#16a34a,stroke-width:3px;
+  linkStyle 8 stroke:#16a34a,stroke-width:3px;
+  linkStyle 9 stroke:#16a34a,stroke-width:3px;
+  linkStyle 1 stroke:#dc2626,stroke-width:3px;`,
+
+  "cqrs-4": `flowchart TD
+  scanners["Movement scanners"] -->|"stock movements · 150/s"| wms["Movement command side · allocation and lot tracking rules only"]
+  dash["Picker dashboards"] -.->|"dashboard changes no longer touch movement entities"| wms
+  wms --> db[("Movement DB · shaped for the rules")]
+  wms -->|"shipment ready"| carrier["Carrier integration"]
+  erp["ERP"] -->|"purchase orders"| wms
+  wms -->|"publish stock moved events"| bus[["Stock movement events"]]
+  bus --> proj["Dashboard projector · owns the 40 display fields"]
+  proj --> dashdb[("Dashboard read DB · shaped per dashboard")]
+  dash -->|"25,000 reads/s"| query["Dashboard query service"]
+  query --> dashdb
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class wms,db,bus,proj,dashdb,query added;
+  linkStyle 5 stroke:#16a34a,stroke-width:3px;
+  linkStyle 6 stroke:#16a34a,stroke-width:3px;
+  linkStyle 7 stroke:#16a34a,stroke-width:3px;
+  linkStyle 8 stroke:#16a34a,stroke-width:3px;
+  linkStyle 9 stroke:#16a34a,stroke-width:3px;
+  linkStyle 1 stroke:#dc2626,stroke-width:3px;`,
+
+  "cqrs-5": `flowchart TD
+  stores["Retail stores and call center"] -->|"activate service"| prov["Activation command side · SIM, plan, network rules only"]
+  portal["Customer portal · 200 times activation traffic"] -.->|"no longer loads activation objects"| prov
+  prov --> db[("Subscriber DB · sized for activation")]
+  prov -->|"activate"| net["Network provisioning system"]
+  prov --> billing["Billing system"]
+  dev["Portal developers"] -.->|"no longer edit the activation rules class"| prov
+  prov -->|"publish activation and plan change events"| bus[["Subscriber event stream"]]
+  bus --> proj["Portal projector · a few seconds behind"]
+  proj --> portaldb[("Portal read store · a few fields · sized for portal traffic")]
+  portal -->|"reads"| query["Portal query service"]
+  query --> portaldb
+  dev -->|"add portal fields here"| proj
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class prov,bus,proj,portaldb,query added;
+  linkStyle 6 stroke:#16a34a,stroke-width:3px;
+  linkStyle 7 stroke:#16a34a,stroke-width:3px;
+  linkStyle 8 stroke:#16a34a,stroke-width:3px;
+  linkStyle 9 stroke:#16a34a,stroke-width:3px;
+  linkStyle 10 stroke:#16a34a,stroke-width:3px;
+  linkStyle 11 stroke:#16a34a,stroke-width:3px;
+  linkStyle 1 stroke:#dc2626,stroke-width:3px;
+  linkStyle 5 stroke:#dc2626,stroke-width:3px;`,
+
+  "event-sourcing-1": `flowchart TD
+  app["Mobile banking app"] -->|"deposits and transfers"| ledger["Ledger service"]
+  fees["Fee batch job"] -->|"monthly fees"| ledger
+  ledger -.->|"no more in-place UPDATE"| accts[("Balance view · rebuilt from the event log")]
+  accts -.->|"backup at midnight"| backup[("Nightly backup")]
+  support["Support team · balance at 2:14pm three months ago?"] -.->|"no longer guesses from midnight copies"| backup
+  ledger --> fraud["Fraud scoring"]
+  ledger -->|"append one event per deposit, fee, transfer"| events[("Account event log · append only, timestamped, in order")]
+  events -->|"apply events in order"| accts
+  support -->|"replay one account up to 2:14pm"| replay["Replay tool · balance at any past minute"]
+  replay -->|"reads events in order"| events
+  events -.->|"daily snapshot per account"| snaps[("Balance snapshots · replay starts here")]
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class accts,events,replay,snaps added;
+  linkStyle 6 stroke:#16a34a,stroke-width:3px;
+  linkStyle 7 stroke:#16a34a,stroke-width:3px;
+  linkStyle 8 stroke:#16a34a,stroke-width:3px;
+  linkStyle 9 stroke:#16a34a,stroke-width:3px;
+  linkStyle 10 stroke:#16a34a,stroke-width:3px;
+  linkStyle 2 stroke:#dc2626,stroke-width:3px;
+  linkStyle 4 stroke:#dc2626,stroke-width:3px;`,
+
+  "event-sourcing-2": `flowchart TD
+  doctor["Doctors · change dose"] --> ord["Medication ordering module"]
+  pharm["Pharmacists · adjust frequency"] --> ord
+  nurse["Nurses · mark hold"] --> ord
+  ord -.->|"no more in-place UPDATE"| rx[("Prescription view · rebuilt from the event log")]
+  rx -.->|"3 column copy removed"| shadow[("Shadow history table")]
+  ord --> mar["Medication administration record"]
+  auditors["Auditors · dose at 3:00pm, who changed it in the 20 min before?"] -.->|"no longer used"| shadow
+  ord -->|"append event · DoseChanged, FrequencyAdjusted, HoldPlaced · all 11 columns, user, time"| events[("Prescription event log · append only")]
+  events -->|"apply events in order"| rx
+  auditors -->|"replay to 3:00pm, list events from 2:40pm"| replay["Replay tool · state at any past minute and who changed it"]
+  replay -->|"reads events in order"| events
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class rx,events,replay added;
+  classDef removed stroke:#dc2626,stroke-width:3px,stroke-dasharray:4 4;
+  class shadow removed;
+  linkStyle 7 stroke:#16a34a,stroke-width:3px;
+  linkStyle 8 stroke:#16a34a,stroke-width:3px;
+  linkStyle 9 stroke:#16a34a,stroke-width:3px;
+  linkStyle 10 stroke:#16a34a,stroke-width:3px;
+  linkStyle 3 stroke:#dc2626,stroke-width:3px;
+  linkStyle 4 stroke:#dc2626,stroke-width:3px;
+  linkStyle 6 stroke:#dc2626,stroke-width:3px;`,
+
+  "event-sourcing-3": `flowchart TD
+  players["900,000 daily players"] --> gs["Game servers"]
+  gs -->|"pickups, trades, crafts"| inv["Inventory service · craft ran twice for about 4,000 accounts"]
+  inv -.->|"no more in-place UPDATE"| items[("Item view · rebuilt from the event log")]
+  gs --> match["Matchmaking service"]
+  team["Inventory team · finds the affected accounts"] -.->|"no longer reads final quantities"| items
+  staging["Staging environment · replays one player exactly"] -.->|"no longer reads final quantities"| items
+  inv -->|"append event · ItemPickedUp, ItemTraded, ItemCrafted"| events[("Player event log · append only, per account")]
+  events -->|"apply events in order"| items
+  team -->|"find accounts with the same craft event twice"| events
+  staging -->|"replay one player's pickups, trades, crafts in order"| events
+  restore["Restore job · replays each affected account up to the bad release"] -->|"append correcting events"| events
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class items,team,staging,events,restore added;
+  linkStyle 6 stroke:#16a34a,stroke-width:3px;
+  linkStyle 7 stroke:#16a34a,stroke-width:3px;
+  linkStyle 8 stroke:#16a34a,stroke-width:3px;
+  linkStyle 9 stroke:#16a34a,stroke-width:3px;
+  linkStyle 10 stroke:#16a34a,stroke-width:3px;
+  linkStyle 2 stroke:#dc2626,stroke-width:3px;
+  linkStyle 4 stroke:#dc2626,stroke-width:3px;
+  linkStyle 5 stroke:#dc2626,stroke-width:3px;`,
+
+  "event-sourcing-4": `flowchart TD
+  adjusters["Adjusters · see each status move and when"] --> app["Claims platform"]
+  app -.->|"no more in-place UPDATE"| claims[("Claim view · rebuilt from the event log")]
+  night["Nightly update job"] -.->|"no more overwrites"| claims
+  claims --> pay["Payments system"]
+  legal["Legal team · recompute 18 months of payouts under a corrected rule"] -.->|"no longer limited to final numbers"| claims
+  app --> docs[("Photo and document store")]
+  app -->|"append event · Submitted, Assigned, Estimated, Approved, Paid, with time"| events[("Claim event log · append only")]
+  night -->|"append PayoutCalculated events"| events
+  events -->|"apply events in order"| claims
+  adjusters -->|"list one claim's events with times"| events
+  legal -->|"replay 18 months with the corrected rule"| replay["Replay job · builds new payout figures"]
+  replay -->|"reads events in order"| events
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class adjusters,claims,events,replay added;
+  linkStyle 6 stroke:#16a34a,stroke-width:3px;
+  linkStyle 7 stroke:#16a34a,stroke-width:3px;
+  linkStyle 8 stroke:#16a34a,stroke-width:3px;
+  linkStyle 9 stroke:#16a34a,stroke-width:3px;
+  linkStyle 10 stroke:#16a34a,stroke-width:3px;
+  linkStyle 11 stroke:#16a34a,stroke-width:3px;
+  linkStyle 1 stroke:#dc2626,stroke-width:3px;
+  linkStyle 2 stroke:#dc2626,stroke-width:3px;
+  linkStyle 4 stroke:#dc2626,stroke-width:3px;`,
+
+  "event-sourcing-5": `flowchart TD
+  sites["42 warehouse sites"] -->|"receipts, picks, cycle counts, damage write-offs"| stock["Stock service"]
+  stock -.->|"no more in-place increments"| onhand[("on_hand view · rebuilt from the event log")]
+  deploy["Bad deploy · double-decremented for 90 min"] -.-> stock
+  onhand -.->|"no recount needed"| recount["Physical recount at 11 sites"]
+  finance["Finance · on hand at midnight, each of the last 90 days?"] -.->|"no longer reads the live table"| onhand
+  stock --> orders["Order routing service"]
+  stock -->|"append event · Received, Picked, Counted, WrittenOff · ~3 million/day"| events[("Stock event log · append only")]
+  events -->|"apply events in order"| onhand
+  events -.->|"snapshot at midnight each day"| snaps[("Midnight snapshots · per SKU per site")]
+  finance -->|"read any of the last 90 midnights"| snaps
+  fix["Correction job · finds the doubled Picked events from the 90 min"] -->|"append reversing events, view rebuilds"| events
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class onhand,events,snaps,fix added;
+  classDef removed stroke:#dc2626,stroke-width:3px,stroke-dasharray:4 4;
+  class recount removed;
+  linkStyle 6 stroke:#16a34a,stroke-width:3px;
+  linkStyle 7 stroke:#16a34a,stroke-width:3px;
+  linkStyle 8 stroke:#16a34a,stroke-width:3px;
+  linkStyle 9 stroke:#16a34a,stroke-width:3px;
+  linkStyle 10 stroke:#16a34a,stroke-width:3px;
+  linkStyle 1 stroke:#dc2626,stroke-width:3px;
+  linkStyle 3 stroke:#dc2626,stroke-width:3px;
+  linkStyle 4 stroke:#dc2626,stroke-width:3px;`,
+
+  "database-per-service-1": `flowchart TD
+  clients["Web and mobile clients"] --> gw["API gateway"]
+  gw --> orders["Orders service"]
+  gw --> cust["Customers service"]
+  gw --> other["Four other services · billing, shipping, catalog, notifications"]
+  orders -.->|"shared credentials"| pg[("One Postgres instance · every table, no owner")]
+  cust -.->|"shared credentials"| pg
+  other -.->|"no direct queries into other teams' tables"| pg
+  release["Thursday night joint release"] -.->|"no shared release window"| pg
+  orders -->|"own login · column rename touches only this team"| ordersdb[("Orders DB · orders service only")]
+  cust -->|"own login · one update path"| custdb[("Customers DB · owned by customers team")]
+  other -->|"own login each"| otherdb[("One database per service · four more")]
+  other -->|"read orders through its API"| orders
+  other -->|"read customers through its API"| cust
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class ordersdb,custdb,otherdb added;
+  classDef removed stroke:#dc2626,stroke-width:3px,stroke-dasharray:4 4;
+  class pg,release removed;
+  linkStyle 8 stroke:#16a34a,stroke-width:3px;
+  linkStyle 9 stroke:#16a34a,stroke-width:3px;
+  linkStyle 10 stroke:#16a34a,stroke-width:3px;
+  linkStyle 11 stroke:#16a34a,stroke-width:3px;
+  linkStyle 12 stroke:#16a34a,stroke-width:3px;
+  linkStyle 4 stroke:#dc2626,stroke-width:3px;
+  linkStyle 5 stroke:#dc2626,stroke-width:3px;
+  linkStyle 6 stroke:#dc2626,stroke-width:3px;
+  linkStyle 7 stroke:#dc2626,stroke-width:3px;`,
+
+  "database-per-service-2": `flowchart TD
+  viewers["Viewers"] --> catalog["Catalog service"]
+  catalog -.->|"eleven join tables retired"| sql[("Normalized catalog SQL tables")]
+  recs["Recommendations service"] -.->|"no direct SQL joins"| sql
+  search["Search indexer"] -.->|"no direct SQL joins"| sql
+  billing["Billing entitlement service"] -.->|"no direct SQL joins"| sql
+  catalog -->|"storage choice made by catalog team alone"| doc[("Catalog document store · catalog service only")]
+  recs -->|"catalog API"| catalog
+  search -->|"catalog API"| catalog
+  billing -->|"catalog API"| catalog
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class doc added;
+  classDef removed stroke:#dc2626,stroke-width:3px,stroke-dasharray:4 4;
+  class sql removed;
+  linkStyle 5 stroke:#16a34a,stroke-width:3px;
+  linkStyle 6 stroke:#16a34a,stroke-width:3px;
+  linkStyle 7 stroke:#16a34a,stroke-width:3px;
+  linkStyle 8 stroke:#16a34a,stroke-width:3px;
+  linkStyle 1 stroke:#dc2626,stroke-width:3px;
+  linkStyle 2 stroke:#dc2626,stroke-width:3px;
+  linkStyle 3 stroke:#dc2626,stroke-width:3px;
+  linkStyle 4 stroke:#dc2626,stroke-width:3px;`,
+
+  "database-per-service-3": `flowchart TD
+  driverapp["Driver app"] --> dsvc["Driver service · validation rules"]
+  riderapp["Rider app"] --> psvc["Pricing service"]
+  dsvc -->|"only login with write rights"| table[("Drivers DB · driver service only")]
+  psvc -.->|"no direct writes"| table
+  psvc --> surge[("Surge pricing cache")]
+  dsvc --> docs[("Driver documents store")]
+  psvc -->|"change status through the driver API, validated"| dsvc
+  dsvc -->|"records the calling service for each status write"| audit[("Driver change log")]
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class table,audit added;
+  linkStyle 2 stroke:#16a34a,stroke-width:3px;
+  linkStyle 6 stroke:#16a34a,stroke-width:3px;
+  linkStyle 7 stroke:#16a34a,stroke-width:3px;
+  linkStyle 3 stroke:#dc2626,stroke-width:3px;`,
+
+  "database-per-service-4": `flowchart TD
+  users["HR customers"] --> lb["Load balancer"]
+  lb --> login["Login service"]
+  lb --> payroll["Payroll service"]
+  lb --> others["Six other services"]
+  reporting["Reporting service · opened 400 connections"] -.->|"no shared user"| mysql[("One shared MySQL server · one connection limit for all")]
+  login -.->|"no shared connection limit"| mysql
+  payroll -.->|"no shared lock"| mysql
+  others -.->|"no shared user"| mysql
+  lb --> reporting
+  login -->|"own user and connection limit"| logindb[("Login DB")]
+  payroll -->|"own user · 4 min lock hits only payroll"| payrolldb[("Payroll DB")]
+  reporting -->|"own user · 400 connections hit only its own limit"| reportdb[("Reporting read copy · fed by the services")]
+  others -->|"own user each, rights on own tables only"| otherdbs[("One database per service · six more")]
+  logindb -->|"copy changes"| reportdb
+  payrolldb -->|"copy changes"| reportdb
+  otherdbs -->|"copy changes"| reportdb
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class logindb,payrolldb,reportdb,otherdbs added;
+  classDef removed stroke:#dc2626,stroke-width:3px,stroke-dasharray:4 4;
+  class mysql removed;
+  linkStyle 9 stroke:#16a34a,stroke-width:3px;
+  linkStyle 10 stroke:#16a34a,stroke-width:3px;
+  linkStyle 11 stroke:#16a34a,stroke-width:3px;
+  linkStyle 12 stroke:#16a34a,stroke-width:3px;
+  linkStyle 13 stroke:#16a34a,stroke-width:3px;
+  linkStyle 14 stroke:#16a34a,stroke-width:3px;
+  linkStyle 15 stroke:#16a34a,stroke-width:3px;
+  linkStyle 4 stroke:#dc2626,stroke-width:3px;
+  linkStyle 5 stroke:#dc2626,stroke-width:3px;
+  linkStyle 6 stroke:#dc2626,stroke-width:3px;
+  linkStyle 7 stroke:#dc2626,stroke-width:3px;`,
+
+  "database-per-service-5": `flowchart TD
+  advertisers["Advertisers"] --> campaign["Campaign service"]
+  campaign -.->|"no writes into other teams' tables"| db[("Shared ad database · campaign, targeting, billing tables")]
+  targeting["Targeting service · adds a required column"] -.->|"no shared schema"| db
+  billing["Billing service"] -.->|"no SELECT star joins across teams"| db
+  bidder["Ad exchange bidder"] --> targeting
+  billing --> invoices[("Invoice PDF store")]
+  campaign -->|"own login"| campdb[("Campaign DB")]
+  targeting -->|"own login · new column breaks nobody"| targdb[("Targeting DB")]
+  billing -->|"own login"| billdb[("Billing DB")]
+  campaign -->|"targeting API for audience rules"| targeting
+  billing -->|"campaign API"| campaign
+  billing -->|"targeting API"| targeting
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class campdb,targdb,billdb added;
+  classDef removed stroke:#dc2626,stroke-width:3px,stroke-dasharray:4 4;
+  class db removed;
+  linkStyle 6 stroke:#16a34a,stroke-width:3px;
+  linkStyle 7 stroke:#16a34a,stroke-width:3px;
+  linkStyle 8 stroke:#16a34a,stroke-width:3px;
+  linkStyle 9 stroke:#16a34a,stroke-width:3px;
+  linkStyle 10 stroke:#16a34a,stroke-width:3px;
+  linkStyle 11 stroke:#16a34a,stroke-width:3px;
+  linkStyle 1 stroke:#dc2626,stroke-width:3px;
+  linkStyle 2 stroke:#dc2626,stroke-width:3px;
+  linkStyle 3 stroke:#dc2626,stroke-width:3px;`,
+
+  "change-data-capture-1": `flowchart TD
+  shoppers["Shoppers"] --> store["Storefront"]
+  store --> search[("Search index")]
+  store --> pickup["Store-pickup availability page"]
+  vendor["Vendor inventory app on Oracle · unchanged"] -->|"inserts, updates, deletes"| oracle[("Oracle inventory DB")]
+  oracle -.->|"no nightly CSV export"| csv["Nightly CSV job"]
+  csv -.-> search
+  csv -.-> pickup
+  poll["last_modified polling job"] -.->|"no polling queries"| oracle
+  store --> cache[("Product image cache")]
+  oracle -->|"reads the redo log · no extra queries on the vendor app"| cdc["Log reader · captures every insert, update, and delete"]
+  cdc --> topic[["Inventory change stream"]]
+  topic -->|"within a few seconds"| search
+  topic -->|"within a few seconds, deletes included"| pickup
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class cdc,topic added;
+  classDef removed stroke:#dc2626,stroke-width:3px,stroke-dasharray:4 4;
+  class csv,poll removed;
+  linkStyle 9 stroke:#16a34a,stroke-width:3px;
+  linkStyle 10 stroke:#16a34a,stroke-width:3px;
+  linkStyle 11 stroke:#16a34a,stroke-width:3px;
+  linkStyle 12 stroke:#16a34a,stroke-width:3px;
+  linkStyle 4 stroke:#dc2626,stroke-width:3px;
+  linkStyle 5 stroke:#dc2626,stroke-width:3px;
+  linkStyle 6 stroke:#dc2626,stroke-width:3px;
+  linkStyle 7 stroke:#dc2626,stroke-width:3px;`,
+
+  "change-data-capture-2": `flowchart TD
+  staff["Ward staff"] -->|"admissions, discharges, transfers"| emr["Clinical records product · unchanged, no extra work"]
+  emr --> sql[("SQL Server patient stay table")]
+  reload["Full reload job"] -.->|"no more full table reads"| sql
+  reload -.-> beds["Bed management dashboard · status within 5 s"]
+  reload -.-> wh[("Analytics warehouse")]
+  clinicians["Clinicians"] --> beds
+  analysts["Analysts"] --> bi["BI reports"]
+  bi --> wh
+  sql -->|"reads the transaction log"| cdc["Log reader · captures each change"]
+  cdc --> stream[["Patient stay change stream · keeps each consumer's position"]]
+  stream -->|"within 5 s"| beds
+  stream -->|"catches up after being offline"| wh
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class cdc,stream,beds added;
+  classDef removed stroke:#dc2626,stroke-width:3px,stroke-dasharray:4 4;
+  class reload removed;
+  linkStyle 8 stroke:#16a34a,stroke-width:3px;
+  linkStyle 9 stroke:#16a34a,stroke-width:3px;
+  linkStyle 10 stroke:#16a34a,stroke-width:3px;
+  linkStyle 11 stroke:#16a34a,stroke-width:3px;
+  linkStyle 2 stroke:#dc2626,stroke-width:3px;
+  linkStyle 3 stroke:#dc2626,stroke-width:3px;
+  linkStyle 4 stroke:#dc2626,stroke-width:3px;`,
+
+  "change-data-capture-3": `flowchart TD
+  channels["Branches and online banking"] --> mf["Mainframe core account app · not one line changed"]
+  mf --> db[("Core account DB")]
+  db -.->|"no nightly batch file"| batch["Batch file transfer"]
+  batch -.-> fraud["Fraud scoring service · sees changes within 2 s"]
+  batch -.-> wh[("Data warehouse")]
+  batch -.-> search["New search service"]
+  cards["Card network"] --> fraud
+  mfteam["Mainframe team"] -.->|"publishing calls quoted at 14 months, rejected"| mf
+  db -->|"reads the transaction log"| cdc["Log reader · captures each change"]
+  cdc --> stream[["Account change stream · balance and address changes"]]
+  stream -->|"under 2 s"| fraud
+  stream --> wh
+  stream --> search
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class cdc,stream,fraud added;
+  classDef removed stroke:#dc2626,stroke-width:3px,stroke-dasharray:4 4;
+  class batch removed;
+  linkStyle 8 stroke:#16a34a,stroke-width:3px;
+  linkStyle 9 stroke:#16a34a,stroke-width:3px;
+  linkStyle 10 stroke:#16a34a,stroke-width:3px;
+  linkStyle 11 stroke:#16a34a,stroke-width:3px;
+  linkStyle 12 stroke:#16a34a,stroke-width:3px;
+  linkStyle 2 stroke:#dc2626,stroke-width:3px;
+  linkStyle 3 stroke:#dc2626,stroke-width:3px;
+  linkStyle 4 stroke:#dc2626,stroke-width:3px;
+  linkStyle 5 stroke:#dc2626,stroke-width:3px;`,
+
+  "change-data-capture-4": `flowchart TD
+  planners["Planners"] --> erp["Licensed ERP suite · schema untouched, no triggers"]
+  erp --> pg[("ERP Postgres · work orders, bills of material")]
+  floor["Shop-floor display"] -.->|"no polling"| pg
+  portal["Supplier portal"] -.->|"no polling"| pg
+  ml["Demand model"] -.->|"no polling"| pg
+  pg -.->|"no missed deleted rows"| floor
+  portal --> suppliers["Suppliers"]
+  ml --> fs[("Feature store")]
+  pg -->|"reads the write-ahead log"| cdc["Log reader · captures each change"]
+  cdc --> stream[["Work order change stream · includes deletes"]]
+  stream -->|"quantity and due date changes"| floor
+  stream --> portal
+  stream --> ml
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class cdc,stream added;
+  linkStyle 8 stroke:#16a34a,stroke-width:3px;
+  linkStyle 9 stroke:#16a34a,stroke-width:3px;
+  linkStyle 10 stroke:#16a34a,stroke-width:3px;
+  linkStyle 11 stroke:#16a34a,stroke-width:3px;
+  linkStyle 12 stroke:#16a34a,stroke-width:3px;
+  linkStyle 2 stroke:#dc2626,stroke-width:3px;
+  linkStyle 3 stroke:#dc2626,stroke-width:3px;
+  linkStyle 4 stroke:#dc2626,stroke-width:3px;
+  linkStyle 5 stroke:#dc2626,stroke-width:3px;`,
+
+  "change-data-capture-5": `flowchart TD
+  advertisers["Advertisers"] --> crm["In-house CRM · unchanged"]
+  crm --> db[("CRM advertiser DB")]
+  poll["Timestamp polling job"] -.->|"no polling"| db
+  poll -.-> fs[("Feature store · budget caps current within seconds")]
+  fs --> serving["Ad serving · closed accounts stop serving"]
+  serving --> exchange["Ad exchanges"]
+  serving --> logs[("Impression log")]
+  db -->|"reads the transaction log"| cdc["Log reader · captures each change"]
+  cdc --> stream[["Advertiser change stream · includes deletions"]]
+  stream -->|"within seconds"| fs
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class cdc,stream,fs,serving added;
+  classDef removed stroke:#dc2626,stroke-width:3px,stroke-dasharray:4 4;
+  class poll removed;
+  linkStyle 7 stroke:#16a34a,stroke-width:3px;
+  linkStyle 8 stroke:#16a34a,stroke-width:3px;
+  linkStyle 9 stroke:#16a34a,stroke-width:3px;
+  linkStyle 2 stroke:#dc2626,stroke-width:3px;
+  linkStyle 3 stroke:#dc2626,stroke-width:3px;`,
+
+  "transactional-outbox-1": `flowchart TD
+  support["Support agents"] --> api["Refunds service"]
+  api -->|"commit refund row and outbox row in one transaction"| pg[("Refunds Postgres")]
+  api -.->|"no publish from the request"| broker[["Message broker"]]
+  broker --> settle["Settlement · ignores duplicates"]
+  broker --> notify["Notifications · ignores duplicates"]
+  broker --> acct["Accounting · ignores duplicates"]
+  api -.->|"no message for a rolled back refund"| broker
+  pg --> reports["Finance reports"]
+  api -->|"same transaction"| outbox[("Outbox table in Refunds Postgres · message body and destination")]
+  relay["Outbox relay worker · marks each row sent"] -->|"reads unsent rows"| outbox
+  relay -->|"publishes, may repeat after a crash"| broker
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class outbox,relay,settle,notify,acct added;
+  linkStyle 1 stroke:#16a34a,stroke-width:3px;
+  linkStyle 8 stroke:#16a34a,stroke-width:3px;
+  linkStyle 9 stroke:#16a34a,stroke-width:3px;
+  linkStyle 10 stroke:#16a34a,stroke-width:3px;
+  linkStyle 2 stroke:#dc2626,stroke-width:3px;
+  linkStyle 6 stroke:#dc2626,stroke-width:3px;`,
+
+  "transactional-outbox-2": `flowchart TD
+  customers["Customers"] --> order["Order service · 900 orders/s, no two-phase commit"]
+  order -->|"save order and outbox row in one transaction"| mysql[("Orders MySQL")]
+  order -.->|"no publish from the request"| broker[["Message broker · 90 s outage at dinner rush"]]
+  broker --> dispatch["Courier dispatch · ignores duplicates"]
+  broker --> terminal["Restaurant terminals · get every committed order"]
+  order -.->|"no two-phase commit"| broker
+  order --> pay["Payment provider"]
+  order -->|"same transaction"| outbox[("Outbox table in Orders MySQL")]
+  relay["Outbox relay worker · keeps retrying until the broker is back"] -->|"reads unsent rows"| outbox
+  relay -->|"publishes after the outage, marks sent"| broker
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class outbox,relay,order,dispatch,terminal added;
+  linkStyle 1 stroke:#16a34a,stroke-width:3px;
+  linkStyle 7 stroke:#16a34a,stroke-width:3px;
+  linkStyle 8 stroke:#16a34a,stroke-width:3px;
+  linkStyle 9 stroke:#16a34a,stroke-width:3px;
+  linkStyle 2 stroke:#dc2626,stroke-width:3px;
+  linkStyle 5 stroke:#dc2626,stroke-width:3px;`,
+
+  "transactional-outbox-3": `flowchart TD
+  retail["Retail stores and app"] --> act["Line activation service"]
+  act -.->|"no publish before the write"| broker[["Message broker"]]
+  act -->|"write 4 rows and outbox row in one transaction"| db[("Activation DB")]
+  broker --> prov["Provisioning · ignores duplicates"]
+  broker --> billing["Billing · charges only for committed activations"]
+  broker --> sms["SMS welcome · ignores duplicates"]
+  prov --> hlr[("Network subscriber register")]
+  act -->|"same transaction"| outbox[("Outbox table in Activation DB")]
+  relay["Outbox relay worker · picks up unsent rows after a restart"] -->|"reads unsent rows"| outbox
+  relay -->|"publishes after commit, marks sent"| broker
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class outbox,relay,prov,billing,sms added;
+  linkStyle 2 stroke:#16a34a,stroke-width:3px;
+  linkStyle 7 stroke:#16a34a,stroke-width:3px;
+  linkStyle 8 stroke:#16a34a,stroke-width:3px;
+  linkStyle 9 stroke:#16a34a,stroke-width:3px;
+  linkStyle 1 stroke:#dc2626,stroke-width:3px;`,
+
+  "transactional-outbox-4": `flowchart TD
+  scanners["Package scanners"] --> lb["Load balancer"]
+  lb --> ship["Shipment service · autoscales down, instances terminated mid-request"]
+  ship -->|"update shipment row and insert outbox row in one transaction"| db[("Shipment DB")]
+  ship -.->|"no publish from the request handler"| broker[["Message broker"]]
+  broker --> tracking["Customer tracking page · ignores duplicate scans"]
+  broker --> recon["Carrier reconciliation job · ignores duplicate scans"]
+  db --> reports["Operations reports"]
+  ship -->|"same transaction"| outbox[("Outbox table in Shipment DB")]
+  relay["Outbox relay worker · separate process, not tied to any request"] -->|"reads unsent rows"| outbox
+  relay -->|"publishes, then marks sent · 0 gap"| broker
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class outbox,relay,tracking,recon added;
+  linkStyle 2 stroke:#16a34a,stroke-width:3px;
+  linkStyle 7 stroke:#16a34a,stroke-width:3px;
+  linkStyle 8 stroke:#16a34a,stroke-width:3px;
+  linkStyle 9 stroke:#16a34a,stroke-width:3px;
+  linkStyle 3 stroke:#dc2626,stroke-width:3px;`,
+
+  "transactional-outbox-5": `flowchart TD
+  subscribers["Subscribers"] --> apps["Web and TV apps"]
+  apps -->|"upgrade plan"| sub["Subscription service"]
+  sub -->|"commit plan row and outbox row in one transaction"| db[("Subscriptions DB")]
+  sub -.->|"no publish from application code"| broker[["Message broker"]]
+  broker --> ent["Entitlement service · sees upgrades in commit order, ignores duplicates"]
+  broker --> inv["Invoicing service · sees upgrades in commit order"]
+  audit["Auditors"] -.-> db
+  sub -->|"same transaction · rows numbered in commit order"| outbox[("Outbox table in Subscriptions DB")]
+  relay["Outbox relay worker · one reader, sends rows in outbox order"] -->|"reads unsent rows in order"| outbox
+  relay -->|"publishes in commit order, marks sent"| broker
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class outbox,relay,ent,inv added;
+  linkStyle 2 stroke:#16a34a,stroke-width:3px;
+  linkStyle 7 stroke:#16a34a,stroke-width:3px;
+  linkStyle 8 stroke:#16a34a,stroke-width:3px;
+  linkStyle 9 stroke:#16a34a,stroke-width:3px;
+  linkStyle 3 stroke:#dc2626,stroke-width:3px;`,
+
+  "saga-1": `flowchart TD
+  customer["Customer app"] -->|"place order"| api["Order Service · coordinator, runs the order as steps"]
+  api -->|"1. reserve items"| inv["Restaurant Inventory Service"]
+  api -->|"2. charge card"| pay["Payments Service"]
+  pay -->|"card charged, cannot be rolled back"| psp["Payment provider"]
+  api -->|"3. assign courier"| courier["Courier Dispatch Service"]
+  api -->|"order row plus which steps finished, one local write"| odb[("Orders Postgres")]
+  inv --> idb[("Inventory Postgres")]
+  pay --> pdb[("Payments Postgres")]
+  courier --> cdb[("Courier Postgres")]
+  api -.->|"about 900 orders a day charged with no courier"| support["Support team · fixes orders by hand"]
+  menu["Menu API"] --> cache[("Menu Cache")]
+  customer --> menu
+  courier -.->|"no courier found"| api
+  api -->|"undo: refund the charge"| pay
+  api -->|"undo: release the items"| inv
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class api added;
+  classDef removed stroke:#dc2626,stroke-width:3px,stroke-dasharray:4 4;
+  class support removed;
+  linkStyle 1 stroke:#16a34a,stroke-width:3px;
+  linkStyle 2 stroke:#16a34a,stroke-width:3px;
+  linkStyle 4 stroke:#16a34a,stroke-width:3px;
+  linkStyle 5 stroke:#16a34a,stroke-width:3px;
+  linkStyle 12 stroke:#16a34a,stroke-width:3px;
+  linkStyle 13 stroke:#16a34a,stroke-width:3px;
+  linkStyle 14 stroke:#16a34a,stroke-width:3px;
+  linkStyle 9 stroke:#dc2626,stroke-width:3px;`,
+
+  "saga-2": `flowchart TD
+  store["Retail store and carrier app"] -->|"activate line"| act["Activation coordinator · stores which steps finished"]
+  act -->|"1. create account"| acct["Customer Account Service"]
+  act -->|"2. assign phone number"| num["Number Inventory Service"]
+  act -->|"3. turn line on · 8 to 40 s, no lock held"| net["Network Provisioning Service"]
+  act -->|"4. start monthly charge"| bill["Billing Service"]
+  acct --> adb[("Account DB")]
+  num --> ndb[("Number DB")]
+  net --> core["Network core"]
+  bill --> bdb[("Billing DB")]
+  act -.->|"gives up wherever it breaks"| half["Half-activated lines"]
+  store --> plans["Plan Catalog API"]
+  plans --> pcache[("Plan Cache")]
+  act -->|"saves progress per activation"| sdb[("Activation state DB")]
+  net -.->|"provisioning fails"| act
+  act -->|"undo: release the number"| num
+  act -->|"undo: close the new account"| acct
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class act,sdb added;
+  classDef removed stroke:#dc2626,stroke-width:3px,stroke-dasharray:4 4;
+  class half removed;
+  linkStyle 3 stroke:#16a34a,stroke-width:3px;
+  linkStyle 12 stroke:#16a34a,stroke-width:3px;
+  linkStyle 13 stroke:#16a34a,stroke-width:3px;
+  linkStyle 14 stroke:#16a34a,stroke-width:3px;
+  linkStyle 15 stroke:#16a34a,stroke-width:3px;
+  linkStyle 9 stroke:#dc2626,stroke-width:3px;`,
+
+  "saga-3": `flowchart TD
+  agent["Agent portal"] -->|"one API call: issue policy"| api["Policy API · one call for the agent, runs four local steps in order"]
+  api -->|"1. record accepted risk"| uw["Underwriting Service"]
+  api -->|"2. file signed contract"| doc["Document Service"]
+  api -->|"3. take first premium"| pay["Payments Service"]
+  api -->|"4. open coverage record"| claims["Claims Service"]
+  uw --> uwdb[("Underwriting DB · accepted risk")]
+  doc --> docdb[("Contract store · signed contract")]
+  pay --> paydb[("Payments DB · first premium")]
+  claims --> cdb[("Claims DB · coverage record")]
+  api -.->|"two-phase commit not enabled"| dba["DBA team"]
+  pay -.->|"premium rejected, policy stays live"| live["Live policy with no premium"]
+  agent --> quote["Quote Service"]
+  quote --> rates[("Rate tables")]
+  api -->|"steps done and the undo for each"| log[("Issuance saga log")]
+  pay -.->|"premium rejected"| api
+  api -->|"undo: void the contract"| doc
+  api -->|"undo: withdraw the accepted risk"| uw
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class api,log added;
+  classDef removed stroke:#dc2626,stroke-width:3px,stroke-dasharray:4 4;
+  class live removed;
+  linkStyle 1 stroke:#16a34a,stroke-width:3px;
+  linkStyle 2 stroke:#16a34a,stroke-width:3px;
+  linkStyle 3 stroke:#16a34a,stroke-width:3px;
+  linkStyle 4 stroke:#16a34a,stroke-width:3px;
+  linkStyle 13 stroke:#16a34a,stroke-width:3px;
+  linkStyle 14 stroke:#16a34a,stroke-width:3px;
+  linkStyle 15 stroke:#16a34a,stroke-width:3px;
+  linkStyle 16 stroke:#16a34a,stroke-width:3px;
+  linkStyle 10 stroke:#dc2626,stroke-width:3px;`,
+
+  "saga-4": `flowchart TD
+  shipper["Shipper portal"] -->|"book shipment"| api["Booking API · starts the booking and returns"]
+  api -->|"hold truck slot"| cap["Capacity Service · region A"]
+  api -->|"file paperwork · 80 to 200 ms away"| customs["Customs Service · region B"]
+  api -->|"create receivable · 80 to 200 ms away"| inv["Invoicing Service · region C"]
+  cap --> capdb[("Capacity DB")]
+  customs -->|"file with broker"| broker["Customs broker"]
+  customs --> cudb[("Customs DB")]
+  inv --> ardb[("Accounts receivable DB")]
+  customs -.->|"about 2 percent of bookings fail here"| api
+  capdb -.->|"truck slot held forever, no invoice"| stuck["Stuck truck slots"]
+  shipper --> track["Tracking Service"]
+  track --> gps[("GPS ping store")]
+  cap -->|"SlotHeld event, saved with the slot in one write"| bus[["Booking event bus"]]
+  bus -->|"SlotHeld"| customs
+  customs -->|"CustomsFiled event"| bus
+  bus -->|"CustomsFiled"| inv
+  customs -->|"CustomsFailed event"| bus
+  bus -->|"CustomsFailed: release the truck slot"| cap
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class api,bus added;
+  classDef removed stroke:#dc2626,stroke-width:3px,stroke-dasharray:4 4;
+  class stuck removed;
+  linkStyle 12 stroke:#16a34a,stroke-width:3px;
+  linkStyle 13 stroke:#16a34a,stroke-width:3px;
+  linkStyle 14 stroke:#16a34a,stroke-width:3px;
+  linkStyle 15 stroke:#16a34a,stroke-width:3px;
+  linkStyle 16 stroke:#16a34a,stroke-width:3px;
+  linkStyle 17 stroke:#16a34a,stroke-width:3px;
+  linkStyle 2 stroke:#dc2626,stroke-width:3px;
+  linkStyle 3 stroke:#dc2626,stroke-width:3px;
+  linkStyle 8 stroke:#dc2626,stroke-width:3px;
+  linkStyle 9 stroke:#dc2626,stroke-width:3px;`,
+
+  "saga-5": `flowchart TD
+  doctor["Referring doctor"] -->|"create referral"| ref["Referral coordinator · runs four local steps, saves progress"]
+  ref -->|"1. create referral record"| sched["Scheduling Service"]
+  ref -->|"2. reserve clinic slot"| clinic["Specialist Clinic Service"]
+  ref -->|"3. update coverage check"| ben["Benefits Service"]
+  ref -->|"4. notify records"| rec["Records Service"]
+  sched --> sdb[("Scheduling DB")]
+  clinic --> cdb[("Clinic DB · slot held")]
+  ben --> bdb[("Benefits DB")]
+  rec --> rdb[("Records DB")]
+  ref -.->|"fails halfway about 40 times a week"| orphan["Clinic slot held for a patient with no appointment"]
+  monolith["Old monolith DB · one transaction, retired"] -.-> ref
+  doctor --> directory["Provider directory"]
+  ref -->|"which steps finished"| state[("Referral saga state DB")]
+  ben -.->|"coverage check fails"| ref
+  ref -->|"undo: release the clinic slot"| clinic
+  ref -->|"undo: cancel the referral record"| sched
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class ref,state added;
+  classDef removed stroke:#dc2626,stroke-width:3px,stroke-dasharray:4 4;
+  class orphan removed;
+  linkStyle 1 stroke:#16a34a,stroke-width:3px;
+  linkStyle 2 stroke:#16a34a,stroke-width:3px;
+  linkStyle 3 stroke:#16a34a,stroke-width:3px;
+  linkStyle 4 stroke:#16a34a,stroke-width:3px;
+  linkStyle 12 stroke:#16a34a,stroke-width:3px;
+  linkStyle 13 stroke:#16a34a,stroke-width:3px;
+  linkStyle 14 stroke:#16a34a,stroke-width:3px;
+  linkStyle 15 stroke:#16a34a,stroke-width:3px;
+  linkStyle 9 stroke:#dc2626,stroke-width:3px;`,
+
+  "compensating-transaction-1": `flowchart TD
+  traveler["Traveler app"] -->|"book trip"| orch["Booking orchestrator · runs steps in order"]
+  orch -->|"1. book flight"| flight["Flight supplier API"]
+  orch -->|"2. book rental car"| car["Car supplier API"]
+  orch -->|"3. book hotel"| hotel["Hotel supplier API"]
+  hotel -.->|"fails after retries are exhausted"| orch
+  orch -->|"each finished step, its inputs, and its undo call"| log[("Step log")]
+  log -->|"read by hand, about 30 times a week"| oncall["On-call engineer"]
+  oncall -->|"cancel by hand · 15 percent fee"| flight
+  oncall -->|"cancel by hand · deposit back, booking fee kept"| car
+  orch --> pay["Payments Service"]
+  traveler --> search["Trip Search Service"]
+  orch -->|"undo: cancel flight · accept 15 percent fee"| flight
+  orch -->|"undo: cancel car · deposit back"| car
+  orch -->|"marks each undo done"| log
+  orch -.->|"page only when an undo call keeps failing"| oncall
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class log added;
+  linkStyle 5 stroke:#16a34a,stroke-width:3px;
+  linkStyle 11 stroke:#16a34a,stroke-width:3px;
+  linkStyle 12 stroke:#16a34a,stroke-width:3px;
+  linkStyle 13 stroke:#16a34a,stroke-width:3px;
+  linkStyle 14 stroke:#16a34a,stroke-width:3px;
+  linkStyle 6 stroke:#dc2626,stroke-width:3px;
+  linkStyle 7 stroke:#dc2626,stroke-width:3px;
+  linkStyle 8 stroke:#dc2626,stroke-width:3px;`,
+
+  "compensating-transaction-2": `flowchart TD
+  cycle["Monthly pay cycle workflow"] -->|"send payments"| ach["Bank ACH file · 4,200 payments sent"]
+  cycle -->|"deduct premiums"| benefits["Benefits vendor"]
+  cycle -->|"step 4 · file taxes"| tax["Tax filing vendor"]
+  tax -.->|"rejects the batch"| cycle
+  cycle -.->|"later steps"| k401["401k provider"]
+  cycle -.->|"later steps"| gl["General ledger"]
+  cycle -.->|"later steps"| email["Email notifier"]
+  cycle -.->|"stops, nothing reversed"| finance["Finance team · 2 days reversing by hand"]
+  finance -->|"ACH return entries by hand"| ach
+  finance -->|"adjusting credits by hand"| benefits
+  hr["HR system"] -->|"employee changes"| cycle
+  cycle -->|"each finished step and its undo · progress saved after each undo"| steps[("Compensation log")]
+  cycle -->|"undo: post ACH return entry · a second run does nothing"| ach
+  cycle -->|"undo: post adjusting credit · a second run does nothing"| benefits
+  steps -.->|"resume after a crash, skip undos already done"| cycle
+  cycle -.->|"page when an undo will not go through"| finance
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class steps added;
+  linkStyle 11 stroke:#16a34a,stroke-width:3px;
+  linkStyle 12 stroke:#16a34a,stroke-width:3px;
+  linkStyle 13 stroke:#16a34a,stroke-width:3px;
+  linkStyle 14 stroke:#16a34a,stroke-width:3px;
+  linkStyle 15 stroke:#16a34a,stroke-width:3px;
+  linkStyle 7 stroke:#dc2626,stroke-width:3px;
+  linkStyle 8 stroke:#dc2626,stroke-width:3px;
+  linkStyle 9 stroke:#dc2626,stroke-width:3px;`,
+
+  "compensating-transaction-3": `flowchart TD
+  orders["Order Service"] --> flow["Fulfillment workflow"]
+  flow -->|"1. pick · stock decremented"| stock[("Stock counts DB · also changed by other orders")]
+  flow -->|"2. pack · pallet staged"| floor[["Floor crew task queue"]]
+  flow -->|"3. buy label · $8.40"| carrierapi["Carrier label API"]
+  flow -->|"4. hand off to carrier"| handoff["Carrier handoff"]
+  handoff -.->|"address undeliverable · about 700 a day"| flow
+  flow -.->|"gives up, nothing undone · about $5,000 lost a week"| loss["Paid labels, missing stock, staged pallets"]
+  slotting["Slotting Service"] --> stock
+  flow --> tracking[("Shipment tracking DB")]
+  flow -->|"finished steps and the undo order the warehouse chose"| log[("Compensation log")]
+  flow -->|"undo 1: request label refund"| carrierapi
+  flow -->|"undo 2: add a restock entry, no count overwrite"| stock
+  flow -->|"undo 3: create unstage task"| floor
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class log added;
+  classDef removed stroke:#dc2626,stroke-width:3px,stroke-dasharray:4 4;
+  class loss removed;
+  linkStyle 9 stroke:#16a34a,stroke-width:3px;
+  linkStyle 10 stroke:#16a34a,stroke-width:3px;
+  linkStyle 11 stroke:#16a34a,stroke-width:3px;
+  linkStyle 12 stroke:#16a34a,stroke-width:3px;
+  linkStyle 6 stroke:#dc2626,stroke-width:3px;`,
+
+  "compensating-transaction-4": `flowchart TD
+  player["Player"] -->|"buy bundle"| purchase["Bundle purchase process · five steps"]
+  purchase -->|"charge card · settled"| pay["Payments Service"]
+  purchase -->|"grant base game"| ent["Entitlement Service"]
+  purchase -->|"credit 500 in-game currency"| wallet[("Currency balance · player may have spent it")]
+  purchase -->|"grant two add-ons"| ent
+  ent -.->|"add-on 2 rejected · region restriction"| purchase
+  purchase -->|"post achievement"| achievements["Achievement Service"]
+  other["Other purchases"] --> wallet
+  purchase -.->|"gives up, finished steps left in place"| partial["Charged player with a partial bundle"]
+  player --> catalog["Store catalog"]
+  purchase -->|"each finished step and its undo"| log[("Compensation log")]
+  purchase -->|"undo: refund the charge"| pay
+  purchase -->|"undo: revoke base game and add-on 1"| ent
+  purchase -->|"undo: debit 500 from the current balance, no snapshot restore"| wallet
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class log added;
+  classDef removed stroke:#dc2626,stroke-width:3px,stroke-dasharray:4 4;
+  class partial removed;
+  linkStyle 10 stroke:#16a34a,stroke-width:3px;
+  linkStyle 11 stroke:#16a34a,stroke-width:3px;
+  linkStyle 12 stroke:#16a34a,stroke-width:3px;
+  linkStyle 13 stroke:#16a34a,stroke-width:3px;
+  linkStyle 8 stroke:#dc2626,stroke-width:3px;`,
+
+  "compensating-transaction-5": `flowchart TD
+  officer["Loan officer"] --> flow["Mortgage approval flow"]
+  flow -->|"1. pull credit"| credit["Credit bureau"]
+  flow -->|"2. order appraisal · $600"| appraisal["Appraisal vendor"]
+  flow -->|"3. lock rate · held 45 days"| desk["Funding desk API"]
+  flow -->|"4. reserve funds"| funds["Funds reservation service"]
+  funds -.->|"fails after all retries · about 120 files a month"| flow
+  flow -.->|"dead files copied out"| sheet["Ops spreadsheet"]
+  sheet -->|"release rate lock by hand · misses 1 in 8"| desk
+  sheet -->|"cancel appraisal by hand"| appraisal
+  flow --> loanfile[("Loan file DB")]
+  officer --> uploads["Document upload portal"]
+  flow -->|"each finished step and its undo rule"| log[("Compensation log")]
+  flow -->|"undo: cancel appraisal if within 4 h, else accept the bill"| appraisal
+  flow -->|"undo: release rate lock desk call"| desk
+  flow -->|"undo: mark the credit pull withdrawn"| loanfile
+  flow -.->|"alert when an undo call keeps failing"| ops["Ops on-call"]
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class log,ops added;
+  classDef removed stroke:#dc2626,stroke-width:3px,stroke-dasharray:4 4;
+  class sheet removed;
+  linkStyle 11 stroke:#16a34a,stroke-width:3px;
+  linkStyle 12 stroke:#16a34a,stroke-width:3px;
+  linkStyle 13 stroke:#16a34a,stroke-width:3px;
+  linkStyle 14 stroke:#16a34a,stroke-width:3px;
+  linkStyle 15 stroke:#16a34a,stroke-width:3px;
+  linkStyle 6 stroke:#dc2626,stroke-width:3px;
+  linkStyle 7 stroke:#dc2626,stroke-width:3px;
+  linkStyle 8 stroke:#dc2626,stroke-width:3px;`,
 
 };
