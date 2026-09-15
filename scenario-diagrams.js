@@ -1,3 +1,26 @@
+// RULES FOR QUIZ DIAGRAMS
+// Every scenario has a "before" diagram (SCENARIO_DIAGRAMS) and a "solved" diagram
+// (SOLVED_SCENARIO_DIAGRAMS, further down this file).
+//
+// Before diagrams:
+//   - Must match the scenario text. Nothing may contradict it.
+//   - May include extra realistic parts the text does not mention, so the diagram
+//     does not give away the answer.
+//
+// Solved diagrams:
+//   - Parts and edges that are ADDED or CHANGED are GREEN:
+//       classDef added stroke:#16a34a,stroke-width:3px;
+//       linkStyle N stroke:#16a34a,stroke-width:3px;
+//   - Parts and edges that are REMOVED are RED:
+//       classDef removed stroke:#dc2626,stroke-width:3px,stroke-dasharray:4 4;
+//       linkStyle N stroke:#dc2626,stroke-width:3px;
+//   - Something that still exists is not red. Example: a person whose manual step
+//     goes away stays unmarked, and only that step's edge is red.
+//   - linkStyle N counts edges from 0 in the order they are written. Adding or
+//     removing an edge line changes the numbers of every edge after it.
+//
+// Check that every diagram draws: node scripts/verify-scenario-diagrams.js
+
 // Mermaid source for the "before" diagram of a quiz scenario, keyed by scenario id.
 // Each one shows the architecture described in the scenario while the problem is
 // still present. Scenarios missing from this map render with no diagram.
@@ -1462,6 +1485,376 @@ const SCENARIO_DIAGRAMS = {
   worker -->|"step 7 · set budget"| budget["Budget service"]
   worker --> db[("Campaigns DB · 1 in 30 launches live on 3 exchanges, missing on 2")]
   am -.->|"spots half-applied launches by eye, re-runs them, sometimes creates duplicates"| api`,
+  "deployment-stamps-1": `flowchart TD
+  users["Users of 430 companies · each company works in one country"] --> lb["Load balancer"]
+  big["2 large customers · want their own database and their own encryption keys"] --> lb
+  hosp["3 hospitals · want to stay on the previous release for 30 days"] --> lb
+  lb --> app["One shared application tier · one release for all 430 companies"]
+  app -->|"all 430 companies"| pg[("One shared Postgres cluster · 84 percent of max storage · connections near the limit")]
+  pipeline["Release pipeline · last bad migration took all 430 offline for 51 min"] -->|"one release and one migration for everyone"| app`,
+
+  "deployment-stamps-2": `flowchart TD
+  pos["POS terminals of 1,200 restaurant chains · each chain in one country"] --> lb["Load balancer"]
+  big["Largest chain · contract says no shared infrastructure"] --> lb
+  lb --> api["POS backend · one deployment for all 1,200 chains"]
+  api -->|"orders split by chain"| shards[("Orders DB · 8 shards")]
+  api --> search[("Shared search cluster · at its limit")]
+  api --> cache[("Shared cache · at its limit")]
+  api --> broker[["Shared message broker · at its limit"]]
+  broker --> reports["Reporting workers"]`,
+
+  "deployment-stamps-3": `flowchart TD
+  de["German hospital groups · data must stay in Germany"] --> lb["Load balancer · one region"]
+  ca["Canadian hospital groups · data must stay in Canada"] --> lb
+  gov["Government client · needs an environment no one else touches"] --> lb
+  other["Other hospital groups · 60 groups in total"] --> lb
+  lb --> app["Clinical records app · one region · row-level tenant filter"]
+  app -->|"every group's rows, filtered by tenant id"| db[("One records DB")]
+  pipeline["Release pipeline · one bad release hits all 60 groups at once"] --> app
+  app --> docs[("Scan and document store")]`,
+
+  "deployment-stamps-4": `flowchart TD
+  scanners["Scanners of 220 logistics operators · 80 ms normally, 9 s during the job"] --> lb["Load balancer"]
+  heavy["One operator runs a 900,000 row inventory reconciliation"] --> lb
+  lb --> app["Warehouse app · separate thread pools per job type"]
+  app -->|"scanner requests and the reconciliation"| db[("One shared database · largest instance sold · CPU at 100 percent")]
+  app --> labels[["Label printing queue"]]`,
+
+  "deployment-stamps-5": `flowchart TD
+  lic["Fintech clients under a national banking license"] --> gw["API gateway"]
+  unlic["Unlicensed fintech clients"] --> gw
+  audit["2 clients in their annual audit · need a frozen release"] --> gw
+  gw --> api["Banking platform · one stack for all 75 clients"]
+  api --> db[("One shared database · largest instance, cannot grow")]
+  api --> broker[["Shared payments broker"]]
+  onboard["Client onboarding job · slower as the shared database grows"] --> db
+  pipeline["Release pipeline · same weekly release for all 75 clients"] --> api`,
+
+  "geodes-1": `flowchart TD
+  seoul["Players in Seoul · 240 ms per chat send, 310 ms per presence update"] --> api
+  sydney["Players in Sydney · complaining for a year"] --> api
+  us["Players in North America"] --> api
+  api["Presence, friends and chat API · one region, Virginia"] -->|"every write"| db[("Primary DB · Virginia")]
+  db -.->|"copies for reads only"| replica[("Read replica")]
+  api --> push["Push notification service"]`,
+
+  "geodes-2": `flowchart TD
+  drivers["Drivers in Sao Paulo · location update every 4 s · 190 ms round trip"] --> api
+  riders["Riders · open the app while travelling"] --> api
+  api["Dispatch API · one region, Ireland"] -->|"reads and writes trip state"| db[("Trip state DB · Ireland")]
+  api --> maps["Maps and routing service"]
+  api --> pay["Payment service"]`,
+
+  "geodes-3": `flowchart TD
+  blr["Board editors in Bangalore · 280 ms per stroke"] --> api
+  lon["Board editors in London"] --> api
+  sf["Board editors in San Francisco"] --> api
+  api["Board API · 400,000 users a day · all writes in Oregon"] -->|"every stroke"| db[("Board DB · Oregon")]
+  api --> assets[("Image and file store")]
+  runbook["Region failover runbook"] -.->|"manual steps if Oregon is lost"| api`,
+
+  "geodes-4": `flowchart TD
+  cars["Vehicles in 40 countries · 20,000 telemetry messages/s · Europe sees 160 ms extra per command ack"] --> ingest["Telemetry ingest · Ohio"]
+  app["Driver mobile app"] --> appapi["Driver app API · Ohio"]
+  ingest -->|"writes vehicle state"| db[("Vehicle state DB · Ohio · a 40 min outage took the whole fleet offline")]
+  appapi -->|"writes vehicle state"| db
+  ingest --> lake[("Telemetry archive")]`,
+
+  "geodes-5": `flowchart TD
+  asia["Asian exchanges · bid discarded after 100 ms · 38 percent of bids lost to network time"] --> lb["Load balancer"]
+  usx["US exchanges · bid discarded after 100 ms"] --> lb
+  lb --> east["Bidder · US East"]
+  lb --> west["Bidder · US West"]
+  east -->|"read and update budget counter"| budget[("Campaign budget counters · US")]
+  west -->|"read and update budget counter"| budget
+  east --> models[("Bid model store")]`,
+
+  "sidecar-1": `flowchart TD
+  gw["API gateway"] --> java["Java services"]
+  gw --> go["Go services"]
+  gw --> py["Python services · certificate code not started"]
+  gw --> nodejs["Node services · certificate code not started"]
+  java -->|"imports"| libj["Java certificate library · own retry and timeout code"]
+  go -->|"imports"| libg["Go certificate library · own retry and timeout code"]
+  libj -->|"mutual TLS"| ledger["Ledger service"]
+  libg -->|"mutual TLS"| fraud["Fraud scoring service"]
+  py -->|"plain HTTP"| ledger
+  nodejs -->|"plain HTTP"| fraud
+  ca["Certificate authority · rotates every 24 h"] -.->|"format change: 4 libraries to update, 22 services to rebuild"| libj
+  ca -.-> libg
+  ledger --> db[("Payments DB")]
+  fraud --> db`,
+
+  "sidecar-2": `flowchart TD
+  scanner["CT and MRI scanners"] -->|"scan output"| vendor["Vendor C++ reader · no source code · new binary twice a year"]
+  vendor -->|"writes logs"| logdir[("Local log directory")]
+  vendor -->|"plain HTTP over the network"| pacs["Imaging archive"]
+  pacs --> viewer["Radiologist viewer"]
+  logdir -.->|"nothing ships the logs · audit needs them within 60 s"| audit[("Central audit store")]
+  ca["Hospital certificate authority · rotates weekly"] -.->|"program cannot use these certificates"| vendor`,
+
+  "sidecar-3": `flowchart TD
+  players["Players"] --> match["Match servers · C# · own config client"]
+  players --> mm["Matchmaking · Elixir · own config client"]
+  players --> chat["Chat · Rust · own config client · served values 11 min old"]
+  match -->|"polls · own cache and retry rules"| store[("Central config store · XP multipliers, region routing")]
+  mm -->|"polls · own cache and retry rules"| store
+  chat -->|"polls · own cache and retry rules"| store
+  mm --> match
+  designers["Game designers"] -->|"change tuning values · must apply within 30 s"| store`,
+
+  "sidecar-4": `flowchart TD
+  oldfleet["Existing trucks"] -->|"HTTP POST"| lb["Load balancer"]
+  lb --> ingest["Rust ingest service · plain HTTP POST only · 40,000 msgs/s"]
+  ingest --> stream[["Telemetry stream"]]
+  stream --> tsdb[("Time series DB")]
+  newhw["Acquired hardware line"] -->|"MQTT over TLS · binary payload"| ingest
+  ingest -.->|"cannot parse · rewrite would take a quarter"| newhw`,
+
+  "sidecar-5": `flowchart TD
+  subgraph jp["Java bidder process"]
+    javab["Java bidder"]
+    libj["Java log library · adds geo and advertiser fields · buffers lines in bidder heap"]
+  end
+  subgraph gp["Go bidder process"]
+    gob["Go bidder"]
+    libg["Go log library · same buffering bug, fixed separately"]
+  end
+  exch["Ad exchange auctions"] --> javab
+  exch --> gob
+  javab -->|"function call per log line"| libj
+  gob -->|"function call per log line"| libg
+  libj -->|"ships enriched lines"| logs[("Log pipeline")]
+  libg -->|"ships enriched lines"| logs
+  geo[("Geo and advertiser lookup data")] --> libj
+  geo --> libg
+  oom["3 bidder instances crashed out of memory last week · buffer peaked at 1.4 GB"]
+  libj -.-> oom
+  libg -.-> oom`,
+
+  "service-discovery-1": `flowchart TD
+  orders["Parcel order intake"] --> dispatch["Dispatch service · solver IPs from a YAML file in its image"]
+  ops["Ops engineer"] -->|"edits file, rebuilds, redeploys on every scale-up"| dispatch
+  dispatch -->|"calls a listed IP"| solvers["Route solvers · 8 to 60 copies · new private IP each start"]
+  dispatch -.->|"after scale-down · about 4,000 timeouts an hour"| gone["IPs of stopped solvers"]
+  autoscaler["Autoscaler"] -->|"adds and removes copies"| solvers
+  solvers --> maps[("Road network data")]`,
+
+  "service-discovery-2": `flowchart TD
+  uploads["Customer uploads"] --> scheduler["Job scheduler · worker addresses in a text file"]
+  eng["Engineer"] -->|"updates text file each morning"| scheduler
+  scheduler -->|"sends job"| workers["Encoder workers on cheap compute · about 200 start and 180 reclaimed a day · host and port change"]
+  scheduler -.->|"a third of entries stale by afternoon · jobs sit until 10 min timeout"| gone["Reclaimed machines"]
+  provider["Cloud provider"] -->|"reclaims machines"| workers
+  workers --> out[("Encoded video store")]`,
+
+  "service-discovery-3": `flowchart TD
+  customers["Mobile and web banking"] --> payments["Payments API"]
+  sheet["Address spreadsheet"] -->|"regenerated once per deploy"| bundle[("Config bundle of target addresses")]
+  bundle -->|"loaded at deploy"| payments
+  payments -.->|"kept calling for 22 min after a host failure"| oldacct["Old account service address · nothing answers"]
+  platform["Container platform · 30 services"] -->|"restarts containers on a different machine"| acct["Account service · new address"]
+  acct --> ledger[("Core ledger")]`,
+
+  "service-discovery-4": `flowchart TD
+  players["Players"] -->|"find a match"| mm["Matchmaker · guesses ports by convention"]
+  host["Match host · up to 40 match processes"] -->|"starts match · binds any free port"| match["Match process · unpredictable port"]
+  mm -->|"sends players to guessed host and port"| match
+  mm -.->|"3 percent of players · ended matches handed out for another minute"| empty["Port with nothing listening"]
+  match -->|"match results"| results[("Match results DB")]`,
+
+  "service-discovery-5": `flowchart TD
+  shoppers["Shoppers"] --> cart["Cart service"]
+  cart -->|"looks up inventory name"| dns["Internal DNS · 60 s record lifetime · no health check info"]
+  dns -->|"address list, cached"| cart
+  cart -.->|"calls cached addresses · calls fail"| oldinv["Old inventory addresses · removed by autoscaler"]
+  checkout["Checkout service · JVM caches DNS even longer"] --> dns
+  checkout -.->|"calls cached addresses"| oldinv
+  autoscaler["Autoscaler"] -->|"adds instances"| newinv["New inventory instances · no traffic for several minutes"]
+  newinv --> invdb[("Inventory DB")]`,
+
+  "publisher-subscriber-1": `flowchart TD
+  rider["Rider app"] -->|"end trip"| trip["Trip service · busiest service in the company"]
+  trip --> tripdb[("Trip DB")]
+  trip -->|"1. HTTP call, waits"| receipts["Receipts"]
+  trip -->|"2. HTTP call, waits"| payouts["Driver payouts"]
+  trip -->|"3. HTTP call, waits · down 12 min, completion went from 90 ms to 8 s"| loyalty["Loyalty points"]
+  trip -->|"4. HTTP call, waits"| fraud["Fraud team service"]
+  trip -->|"5. HTTP call, waits"| support["Support tool"]
+  trip -->|"6. HTTP call, waits"| dw["Data warehouse loader"]
+  trip -->|"7. HTTP call, waits"| ins["Insurance partner"]
+  newteam["Eighth consumer · needs a pull request, review, and redeploy of the trip service"] -.->|"asks to be added"| trip
+  driver["Driver app"] -->|"location updates"| trip`,
+
+  "publisher-subscriber-2": `flowchart TD
+  networks["Card networks · 12 million transactions a day"] --> ledger["Core ledger"]
+  ledger --> ldb[("Ledger DB")]
+  ledger -->|"send call"| fq[["Fraud queue · the only queue"]]
+  fq --> fraud["Fraud group · wants over 500 dollars or outside home country"]
+  stmt["Statement group · wants all"] -.->|"asks ledger team for a queue and send call"| ledger
+  rewards["Rewards group · wants merchant categories 5411 and 5812"] -.->|"asks ledger team for a queue and send call"| ledger
+  an1["Analytics group 1 · reads hours later in nightly window"] -.->|"asks ledger team for a queue and send call"| ledger
+  an2["Analytics group 2 · reads hours later in nightly window"] -.->|"asks ledger team for a queue and send call"| ledger`,
+
+  "publisher-subscriber-3": `flowchart TD
+  creator["Creator"] -->|"upload video"| upload["Upload service · marked ready after 40 s"]
+  upload --> store[("Video store")]
+  upload -->|"1. call, waits"| thumb["Thumbnail generation"]
+  upload -->|"2. call, waits · 500s for an hour stopped all uploads"| captions["Caption transcription"]
+  upload -->|"3. call, waits"| copyright["Copyright matching"]
+  upload -->|"4. call, waits"| search["Search indexing"]
+  upload -->|"5. call, waits"| notify["Creator notification"]
+  moderation["Moderation team · sixth reaction needs an upload service change"] -.->|"asks to be added"| upload
+  upload --> meta[("Video metadata DB")]`,
+
+  "publisher-subscriber-4": `flowchart TD
+  meters["4 million smart meters · reading every 15 min"] --> ingest["Ingest service"]
+  ingest -->|"write reading"| q1[["One readings queue"]]
+  ingest -->|"write the same reading a second time"| q2[["Feature store copy queue · drifted after a schema change"]]
+  q1 --> billing["Billing"]
+  q1 --> outage["Outage detection service"]
+  q2 --> fs["ML feature store · other department · offline 2 h every Tuesday"]
+  billing --> bdb[("Billing DB")]
+  outage --> ops["Grid operations dashboard"]`,
+
+  "publisher-subscriber-5": `flowchart TD
+  merchants["Merchants and pricing jobs · 900 price changes per minute"] --> catalog["Catalog service · hardcoded list of 6 endpoints"]
+  catalog --> cdb[("Catalog DB · 2 million listings")]
+  catalog -->|"POST in write path"| search["Search index"]
+  catalog -->|"POST in write path"| cart["Cart recalculation job"]
+  catalog -->|"POST in write path"| history["Price history archive"]
+  catalog -->|"POST in write path · timing out, write throughput down 70 percent"| feedA["Partner feed exporter A"]
+  catalog -->|"POST in write path"| feedB["Partner feed exporter B"]
+  catalog -->|"POST in write path"| alerts["Merchandising alert tool · only cares about drops over 20 percent"]
+  seventh["Seventh system · other region, different stack"] -.->|"would need adding to the list"| catalog`,
+
+  "canary-release-1": `flowchart TD
+  players["Video players · many on slow mobile networks"] -->|"fetch segments"| cdn["CDN edge"]
+  players -->|"request manifest"| lb["Load balancer"]
+  lb -->|"100 percent of sessions"| oldm["Old manifest server · rebuffer rate 0.8 percent"]
+  newm["Rewritten manifest server · load tested, no real mobile sessions yet"] -.-> catalog[("Rendition catalog")]
+  oldm --> catalog
+  cdn --> origin[("Video segment origin")]
+  oldm -.->|"rebuffer rate, startup time, CPU"| metrics["Playback metrics dashboard"]`,
+
+  "canary-release-2": `flowchart TD
+  merchants["Merchant terminals"] -->|"card authorization"| gw["Authorization gateway"]
+  gw -->|"all live authorizations"| oldscore["Current fraud scorer"]
+  gw -->|"approve or decline"| issuers["Card issuers"]
+  replay[("Last month's traffic replay · decline rate within 0.1 percent · no timing, retries, or issuer responses")] -.->|"offline only"| newscore["New fraud scorer · no live traffic"]
+  oldscore --> features[("Cardholder feature store")]
+  issuers -.->|"issuer responses and retries"| gw`,
+
+  "canary-release-3": `flowchart TD
+  shoppers["Real shoppers"] -->|"search query"| lb["Load balancer"]
+  lb -->|"100 percent of queries"| oldrank["Current ranking service"]
+  oldrank --> index[("Real search index · full catalog")]
+  staging["Staging · 2 percent of catalog, synthetic queries"] --> newrank["Rewritten ranking service"]
+  oldrank -.->|"click-through rate, zero-result rate, p95 latency"| analytics["Search analytics"]
+  shoppers -->|"clicks and orders"| checkout["Checkout service"]`,
+
+  "canary-release-4": `flowchart TD
+  travelers["Travelers and agents · real booking traffic"] --> lb["Load balancer"]
+  lb -->|"spread across all 200"| fleet["200 application servers · current Java runtime"]
+  fleet --> sessions[("Session store · real session sizes")]
+  fleet --> res[("Reservations DB")]
+  synth["Synthetic load test · never reproduced the pauses"] -.->|"new Java runtime"| testenv["Test servers"]
+  fleet -.->|"GC pause times"| monitoring["JVM monitoring"]
+  upgrade["Runtime upgrade · pauses appear only after 8 h of real traffic"] -.-> fleet`,
+
+  "canary-release-5": `flowchart TD
+  internal["Insurer internal accounts"] --> gw["API gateway"]
+  pilot["Clinics that agreed to test"] --> gw
+  clinics["Other clinics · 3,000 total"] --> gw
+  gw -->|"all traffic"| v1["Claims API v1 · current"]
+  v2["Claims API v2 · new release"] -.->|"planned: replace v1 for everyone"| gw
+  v1 --> claims[("Claims DB")]
+  v1 -.->|"rejection rate, p99"| metrics["API metrics"]
+  staff["Clinic staff"] -.->|"phone calls when claims are rejected"| support["Support line"]`,
+
+  "blue-green-deployment-1": `flowchart TD
+  clients["Card acquirers and bank partners · 99.99 percent availability"] -->|"authorization requests"| lb["Load balancer"]
+  lb --> fleet["40 app servers · rolling restart takes 25 min · old and new code serve side by side"]
+  fleet -.->|"about 900 failed authorizations from version mismatches"| clients
+  pipeline["Deploy pipeline"] -->|"rolling restart · backing out is another 25 min"| fleet
+  fleet --> db[("Authorization DB")]
+  fleet --> risk["Risk rules service"]`,
+
+  "blue-green-deployment-2": `flowchart TD
+  staff["3,000 clinic staff · 10 min outage sends front desks to paper"] --> lb["Load balancer"]
+  lb --> app["Scheduling app servers"]
+  lb -.->|"2am · 40 min maintenance page"| maint["Maintenance page"]
+  app --> db[("Scheduling DB")]
+  staging["Staging box · smaller than production"] -->|"test run on smaller hardware"| pipeline["Release pipeline"]
+  pipeline -->|"install new build in place at 2am · smoke tests failed twice at 2:30am"| app
+  backup[("Nightly backup")] -.->|"restore after a failed release · 2 hours"| db`,
+
+  "blue-green-deployment-3": `flowchart TD
+  trucks["80,000 trucks · 12,000 GPS pings/s"] --> ingest["Ingest and dashboard stack · live"]
+  dispatch["Dispatchers"] --> ingest
+  ingest --> geo[("Position store")]
+  artifacts[("Artifact store")] -->|"rebuild and redeploy previous version · 18 min of stale positions"| ingest
+  ingest -.->|"disaster recovery copy only"| standby["Warm standby copy of the full stack · same region · idle 364 days a year"]`,
+
+  "blue-green-deployment-4": `flowchart TD
+  players["250,000 players · long-lived sockets that reconnect on drop"] --> router["Router · repointed in one config change"]
+  router --> fleetA["Half the fleet · new matchmaking rules"]
+  router --> fleetB["Half the fleet · old matchmaking rules"]
+  fleetA -.->|"same lobby, different rules · 4 percent of matches fail to start"| lobby["Lobby and match start service"]
+  fleetB -.-> lobby
+  lobby --> db[("Player profile DB")]
+  pipeline["Deploy pipeline"] -->|"partial deploy · rollback takes 12 min"| fleetA`,
+
+  "blue-green-deployment-5": `flowchart TD
+  customers["Bank customers · 90 percent of monthly traffic in 3 days"] --> lb["Load balancer"]
+  lb --> servers["Portal servers · upgraded in place"]
+  servers --> db[("Statement DB")]
+  servers --> docs[("Statement PDF store")]
+  pipeline["Release pipeline"] -->|"install new package in place · rollback reinstall up to 45 min · once left a half-upgraded machine"| servers
+  servers -.->|"failover rehearsal due more than once a year, never run"| standby["Standby hardware · idle"]`,
+
+  "feature-toggles-1": `flowchart TD
+  devs["Developers"] -->|"new bidding algorithm on a side branch · 6 weeks"| branch["Side branch"]
+  branch -.->|"2 merges so far with 400 conflicting files"| trunk["Shared branch"]
+  devs -->|"20 deploys a day"| trunk
+  trunk --> pipeline["Build and deploy pipeline"]
+  pipeline --> adserver["Ad servers · current bidding"]
+  exchange["Ad exchange"] -->|"bid requests · 8 ms latency budget"| adserver
+  adserver --> metrics["Bid latency metrics"]`,
+
+  "feature-toggles-2": `flowchart TD
+  viewers["Viewers"] --> lb["Load balancer"]
+  lb --> home["Home page service"]
+  home -->|"every page load · about 120 ms"| recs["Recommendation service · ML model"]
+  recs -.->|"fell over in last month's spike and took the home page down"| home
+  home --> catalog[("Catalog DB")]
+  oncall["3am operator"] -.->|"only option is to wake a developer and ship a build"| devs["Developers"]`,
+
+  "feature-toggles-3": `flowchart TD
+  users["40,000 business customers"] --> lb["Load balancer"]
+  testers["30 internal test users · need the new screen now"] --> lb
+  lb --> app["Banking web app · new approval screen deployed but not live"]
+  app --> db[("Payments DB")]
+  cab["Change advisory approval"] --> pipeline["Deploy pipeline · 50 min"]
+  pipeline -->|"going live means a new deploy · hard to hit 9am on the 14th"| app
+  legal["Legal · customer agreement update on the 14th"] -.-> cab`,
+
+  "feature-toggles-4": `flowchart TD
+  job["Nightly firmware update job · old and new scheduling code both in the binary"] -->|"push firmware updates"| meters["2 million smart meters"]
+  job --> sched["Scheduling logic · old version only runs"]
+  sched --> fw[("Firmware image store")]
+  pipeline["Deploy pipeline · 35 min per deploy"] -->|"new build to change the split · disturbs in-flight update jobs"| job
+  job --> errors["Error rate dashboard"]`,
+
+  "feature-toggles-5": `flowchart TD
+  users["Warehouse app users"] --> app["Warehouse app"]
+  app --> check{"account id in the hardcoded list of 12?"}
+  check -->|"yes"| report["Premium route-optimization report"]
+  check -->|"no"| standard["Standard reports"]
+  sales["Sales · about 2 new enterprise customers a week"] -->|"asks for a code change"| devs["Developers"]
+  devs -->|"edit the list and release"| pipeline["Release pipeline"]
+  pipeline --> app
+  app --> db[("Warehouse DB")]`,
 
 };
 
@@ -5028,5 +5421,1127 @@ const SOLVED_SCENARIO_DIAGRAMS = {
   linkStyle 12 stroke:#16a34a,stroke-width:3px;
   linkStyle 13 stroke:#16a34a,stroke-width:3px;
   linkStyle 6 stroke:#dc2626,stroke-width:3px;`,
+  "deployment-stamps-1": `flowchart TD
+  users["Users of 430 companies · each company works in one country"] --> lb["Stamp router · looks up each company's stamp"]
+  big["2 large customers · want their own database and their own encryption keys"] --> lb
+  hosp["3 hospitals · want to stay on the previous release for 30 days"] --> lb
+  lb -->|"company id to stamp"| map[("Company to stamp table")]
+  lb -->|"200 companies"| app1["Stamp A · app tier"]
+  lb -->|"225 companies"| app2["Stamp B · app tier"]
+  lb -->|"large customer 1 only"| app3["Stamp C · app tier"]
+  lb -->|"large customer 2 only"| app4["Stamp D · app tier"]
+  lb -->|"3 hospitals only"| app5["Stamp E · app tier · stays on the previous release for 30 days"]
+  app1 --> db1[("Stamp A Postgres")]
+  app2 --> db2[("Stamp B Postgres")]
+  app3 --> db3[("Stamp C Postgres · customer 1 encryption keys")]
+  app4 --> db4[("Stamp D Postgres · customer 2 encryption keys")]
+  app5 --> db5[("Stamp E Postgres")]
+  pipeline["Release pipeline · every stamp built from one template · a bad migration hits one stamp"] -->|"1. release to stamp A first"| app1
+  pipeline -->|"2. then stamps B, C, D one at a time"| app2
+  pipeline -.->|"3. 30 days later"| app5
+  lb -.->|"no single shared application tier"| app["One shared application tier"]
+  app -.-> pg[("One shared Postgres cluster")]
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class lb,map,app1,app2,app3,app4,app5,db1,db2,db3,db4,db5,pipeline added;
+  classDef removed stroke:#dc2626,stroke-width:3px,stroke-dasharray:4 4;
+  class app,pg removed;
+  linkStyle 3 stroke:#16a34a,stroke-width:3px;
+  linkStyle 4 stroke:#16a34a,stroke-width:3px;
+  linkStyle 5 stroke:#16a34a,stroke-width:3px;
+  linkStyle 6 stroke:#16a34a,stroke-width:3px;
+  linkStyle 7 stroke:#16a34a,stroke-width:3px;
+  linkStyle 8 stroke:#16a34a,stroke-width:3px;
+  linkStyle 9 stroke:#16a34a,stroke-width:3px;
+  linkStyle 10 stroke:#16a34a,stroke-width:3px;
+  linkStyle 11 stroke:#16a34a,stroke-width:3px;
+  linkStyle 12 stroke:#16a34a,stroke-width:3px;
+  linkStyle 13 stroke:#16a34a,stroke-width:3px;
+  linkStyle 14 stroke:#16a34a,stroke-width:3px;
+  linkStyle 15 stroke:#16a34a,stroke-width:3px;
+  linkStyle 16 stroke:#16a34a,stroke-width:3px;
+  linkStyle 17 stroke:#dc2626,stroke-width:3px;
+  linkStyle 18 stroke:#dc2626,stroke-width:3px;`,
+
+  "deployment-stamps-2": `flowchart TD
+  pos["POS terminals of 1,200 restaurant chains · each chain in one country"] --> lb["Stamp router · looks up each chain's stamp"]
+  big["Largest chain · contract says no shared infrastructure"] -->|"own hostname · skips the shared router and table"| solo["Stamp 5 · largest chain alone · no parts shared with other chains"]
+  lb -->|"chain id to stamp"| map[("Chain to stamp table")]
+  lb -->|"about 300 chains"| api1["Stamp 1 · POS backend"]
+  api1 --> orders1[("Stamp 1 orders DB")]
+  api1 --> search1[("Stamp 1 search cluster")]
+  api1 --> cache1[("Stamp 1 cache")]
+  api1 --> broker1[["Stamp 1 message broker"]]
+  broker1 --> reports["Stamp 1 reporting workers"]
+  lb -->|"about 300 chains each · add a stamp when these fill up"| stamps["Stamps 2 to 4 · same template · own backend, orders DB, search, cache, broker"]
+  big -.->|"no longer through the shared router"| lb
+  lb -.->|"no single giant deployment"| api["One POS backend deployment"]
+  api -.-> shards[("Orders DB · 8 shards")]
+  api -.-> search[("Shared search cluster")]
+  api -.-> cache[("Shared cache")]
+  api -.-> broker[["Shared message broker"]]
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class lb,map,api1,orders1,search1,cache1,broker1,reports,stamps,solo added;
+  classDef removed stroke:#dc2626,stroke-width:3px,stroke-dasharray:4 4;
+  class api,shards,search,cache,broker removed;
+  linkStyle 2 stroke:#16a34a,stroke-width:3px;
+  linkStyle 3 stroke:#16a34a,stroke-width:3px;
+  linkStyle 4 stroke:#16a34a,stroke-width:3px;
+  linkStyle 5 stroke:#16a34a,stroke-width:3px;
+  linkStyle 6 stroke:#16a34a,stroke-width:3px;
+  linkStyle 7 stroke:#16a34a,stroke-width:3px;
+  linkStyle 8 stroke:#16a34a,stroke-width:3px;
+  linkStyle 9 stroke:#16a34a,stroke-width:3px;
+  linkStyle 11 stroke:#dc2626,stroke-width:3px;
+  linkStyle 12 stroke:#dc2626,stroke-width:3px;
+  linkStyle 13 stroke:#dc2626,stroke-width:3px;
+  linkStyle 14 stroke:#dc2626,stroke-width:3px;
+  linkStyle 15 stroke:#dc2626,stroke-width:3px;
+  linkStyle 1 stroke:#16a34a,stroke-width:3px;
+  linkStyle 10 stroke:#dc2626,stroke-width:3px;`,
+
+  "deployment-stamps-3": `flowchart TD
+  de["German hospital groups · data must stay in Germany"] --> lb["Stamp router · looks up each group's stamp"]
+  ca["Canadian hospital groups · data must stay in Canada"] --> lb
+  gov["Government client · needs an environment no one else touches"] -->|"own hostname · skips the shared router and table"| stgov["Government stamp · no parts shared with any other client"]
+  other["Other hospital groups · 60 groups in total"] --> lb
+  lb -->|"group id to stamp"| map[("Group to stamp table")]
+  lb -->|"German groups"| stde["Germany stamp · app, records DB, document store · runs in a German region"]
+  lb -->|"Canadian groups"| stca["Canada stamp · app, records DB, document store · runs in a Canadian region"]
+  gov -.->|"no longer through the shared router"| lb
+  lb -->|"other groups that accept frequent changes"| stearly["Early stamp · gets each release first"]
+  lb -->|"remaining other groups"| strest["Main stamp"]
+  pipeline["Release pipeline · every stamp built from one template"] -->|"1. release to the early stamp"| stearly
+  pipeline -->|"2. then the other stamps, one at a time"| strest
+  lb -.->|"no single shared deployment"| app["Clinical records app · one region"]
+  app -.-> db[("One records DB")]
+  app -.-> docs[("Scan and document store")]
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class lb,map,stde,stca,stgov,stearly,strest,pipeline added;
+  classDef removed stroke:#dc2626,stroke-width:3px,stroke-dasharray:4 4;
+  class app,db,docs removed;
+  linkStyle 4 stroke:#16a34a,stroke-width:3px;
+  linkStyle 5 stroke:#16a34a,stroke-width:3px;
+  linkStyle 6 stroke:#16a34a,stroke-width:3px;
+  linkStyle 8 stroke:#16a34a,stroke-width:3px;
+  linkStyle 9 stroke:#16a34a,stroke-width:3px;
+  linkStyle 10 stroke:#16a34a,stroke-width:3px;
+  linkStyle 11 stroke:#16a34a,stroke-width:3px;
+  linkStyle 12 stroke:#dc2626,stroke-width:3px;
+  linkStyle 13 stroke:#dc2626,stroke-width:3px;
+  linkStyle 14 stroke:#dc2626,stroke-width:3px;
+  linkStyle 2 stroke:#16a34a,stroke-width:3px;
+  linkStyle 7 stroke:#dc2626,stroke-width:3px;`,
+
+  "deployment-stamps-4": `flowchart TD
+  scanners["Scanners of 220 logistics operators · each operator in one country"] --> lb["Stamp router · looks up each operator's stamp"]
+  heavy["One operator runs a 900,000 row inventory reconciliation"] --> lb
+  lb -->|"operator id to stamp"| map[("Operator to stamp table")]
+  lb -->|"heavy operator and 21 others"| app1["Stamp 1 · warehouse app and label queue"]
+  app1 -->|"the reconciliation can only fill this database"| db1[("Stamp 1 database · slow for 22 operators at most")]
+  lb -->|"22 operators each"| others["Stamps 2 to 10 · same template · own app, database, label queue · scanners stay at 80 ms"]
+  lb -.->|"no single shared environment"| app["Warehouse app"]
+  app -.-> db[("One shared database")]
+  app -.-> labels[["Label printing queue"]]
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class lb,map,app1,db1,others added;
+  classDef removed stroke:#dc2626,stroke-width:3px,stroke-dasharray:4 4;
+  class app,db,labels removed;
+  linkStyle 2 stroke:#16a34a,stroke-width:3px;
+  linkStyle 3 stroke:#16a34a,stroke-width:3px;
+  linkStyle 4 stroke:#16a34a,stroke-width:3px;
+  linkStyle 5 stroke:#16a34a,stroke-width:3px;
+  linkStyle 6 stroke:#dc2626,stroke-width:3px;
+  linkStyle 7 stroke:#dc2626,stroke-width:3px;
+  linkStyle 8 stroke:#dc2626,stroke-width:3px;`,
+
+  "deployment-stamps-5": `flowchart TD
+  lic["Fintech clients under a national banking license"] -->|"licensed stamp hostname"| licstamp["Licensed stamp · own app, database, broker · nothing shared with unlicensed clients"]
+  unlic["Unlicensed fintech clients"] -->|"their stamp's hostname"| unlicstamp["Unlicensed stamps 1 to 3 · same template · own app, database, broker each"]
+  audit["2 clients in their annual audit · need a frozen release"] -->|"audit stamp hostname"| auditstamp["Audit stamp · own app, database, broker"]
+  onboard["Client onboarding job · each stamp database stays a fixed size"] -->|"new client goes to a stamp with room, or a new stamp is built"| unlicstamp
+  pipeline["Release pipeline · stamp by stamp"] -->|"weekly"| licstamp
+  pipeline -->|"weekly"| unlicstamp
+  pipeline -.->|"skipped until the audit ends"| auditstamp
+  lic -.->|"no shared gateway"| gw["API gateway"]
+  gw -.-> api["Banking platform · one stack"]
+  api -.-> db[("One shared database")]
+  api -.-> broker[["Shared payments broker"]]
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class licstamp,unlicstamp,auditstamp,onboard,pipeline added;
+  classDef removed stroke:#dc2626,stroke-width:3px,stroke-dasharray:4 4;
+  class gw,api,db,broker removed;
+  linkStyle 0 stroke:#16a34a,stroke-width:3px;
+  linkStyle 1 stroke:#16a34a,stroke-width:3px;
+  linkStyle 2 stroke:#16a34a,stroke-width:3px;
+  linkStyle 3 stroke:#16a34a,stroke-width:3px;
+  linkStyle 4 stroke:#16a34a,stroke-width:3px;
+  linkStyle 5 stroke:#16a34a,stroke-width:3px;
+  linkStyle 6 stroke:#16a34a,stroke-width:3px;
+  linkStyle 7 stroke:#dc2626,stroke-width:3px;
+  linkStyle 8 stroke:#dc2626,stroke-width:3px;
+  linkStyle 9 stroke:#dc2626,stroke-width:3px;
+  linkStyle 10 stroke:#dc2626,stroke-width:3px;`,
+
+  "geodes-1": `flowchart TD
+  seoul["Players in Seoul"] --> glb["Global load balancer · sends each player to the nearest region"]
+  sydney["Players in Sydney"] --> glb
+  us["Players in North America"] --> glb
+  glb -->|"players near Seoul"| apiSeoul["API copy · Seoul region"]
+  glb -->|"players near Sydney"| apiSyd["API copy · Sydney region"]
+  glb -->|"players near Virginia"| api["API copy · Virginia region"]
+  glb -.->|"if Seoul is lost, its players go to the next nearest copy"| apiSyd
+  apiSeoul -->|"reads and writes"| dbSeoul[("DB copy · Seoul")]
+  apiSyd -->|"reads and writes"| dbSyd[("DB copy · Sydney")]
+  api -->|"reads and writes"| db[("DB copy · Virginia")]
+  dbSeoul <-.->|"replicate chat and presence writes both ways"| dbSyd
+  dbSyd <-.->|"replicate writes both ways"| db
+  db <-.->|"replicate writes both ways"| dbSeoul
+  db -.-> replica[("Read replica")]
+  api --> push["Push notification service · runs in every region"]
+  apiSeoul --> push
+  apiSyd --> push
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class glb,apiSeoul,apiSyd,api,dbSeoul,dbSyd,db,push added;
+  classDef removed stroke:#dc2626,stroke-width:3px,stroke-dasharray:4 4;
+  class replica removed;
+  linkStyle 0 stroke:#16a34a,stroke-width:3px;
+  linkStyle 1 stroke:#16a34a,stroke-width:3px;
+  linkStyle 2 stroke:#16a34a,stroke-width:3px;
+  linkStyle 3 stroke:#16a34a,stroke-width:3px;
+  linkStyle 4 stroke:#16a34a,stroke-width:3px;
+  linkStyle 5 stroke:#16a34a,stroke-width:3px;
+  linkStyle 6 stroke:#16a34a,stroke-width:3px;
+  linkStyle 7 stroke:#16a34a,stroke-width:3px;
+  linkStyle 8 stroke:#16a34a,stroke-width:3px;
+  linkStyle 9 stroke:#16a34a,stroke-width:3px;
+  linkStyle 10 stroke:#16a34a,stroke-width:3px;
+  linkStyle 11 stroke:#16a34a,stroke-width:3px;
+  linkStyle 12 stroke:#16a34a,stroke-width:3px;
+  linkStyle 13 stroke:#dc2626,stroke-width:3px;
+  linkStyle 15 stroke:#16a34a,stroke-width:3px;
+  linkStyle 16 stroke:#16a34a,stroke-width:3px;`,
+
+  "geodes-2": `flowchart TD
+  drivers["Drivers in Sao Paulo · location update every 4 s"] --> glb["Global load balancer · sends each request to the nearest region"]
+  riders["Riders · open the app while travelling"] --> glb
+  glb -->|"South America"| apiBr["Dispatch API copy · Brazil region"]
+  glb -->|"Europe"| api["Dispatch API copy · Ireland region"]
+  glb -->|"North America"| apiUs["Dispatch API copy · US region"]
+  glb -.->|"if a region is lost, its traffic goes to the others"| apiUs
+  apiBr -->|"reads and writes trip state"| dbBr[("Trip state copy · Brazil")]
+  api -->|"reads and writes trip state"| db[("Trip state copy · Ireland")]
+  apiUs -->|"reads and writes trip state"| dbUs[("Trip state copy · US")]
+  dbBr <-.->|"replicate writes both ways"| db
+  db <-.->|"replicate writes both ways"| dbUs
+  dbUs <-.->|"replicate writes both ways"| dbBr
+  api --> maps["Maps and routing service · runs in every region"]
+  api --> pay["Payment service · runs in every region"]
+  apiBr --> maps
+  apiUs --> maps
+  apiBr --> pay
+  apiUs --> pay
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class glb,apiBr,api,apiUs,dbBr,db,dbUs,maps,pay added;
+  linkStyle 0 stroke:#16a34a,stroke-width:3px;
+  linkStyle 1 stroke:#16a34a,stroke-width:3px;
+  linkStyle 2 stroke:#16a34a,stroke-width:3px;
+  linkStyle 3 stroke:#16a34a,stroke-width:3px;
+  linkStyle 4 stroke:#16a34a,stroke-width:3px;
+  linkStyle 5 stroke:#16a34a,stroke-width:3px;
+  linkStyle 6 stroke:#16a34a,stroke-width:3px;
+  linkStyle 7 stroke:#16a34a,stroke-width:3px;
+  linkStyle 8 stroke:#16a34a,stroke-width:3px;
+  linkStyle 9 stroke:#16a34a,stroke-width:3px;
+  linkStyle 10 stroke:#16a34a,stroke-width:3px;
+  linkStyle 11 stroke:#16a34a,stroke-width:3px;
+  linkStyle 14 stroke:#16a34a,stroke-width:3px;
+  linkStyle 15 stroke:#16a34a,stroke-width:3px;
+  linkStyle 16 stroke:#16a34a,stroke-width:3px;
+  linkStyle 17 stroke:#16a34a,stroke-width:3px;`,
+
+  "geodes-3": `flowchart TD
+  blr["Board editors in Bangalore"] --> glb["Global load balancer · sends each editor to the nearest region"]
+  lon["Board editors in London"] --> glb
+  sf["Board editors in San Francisco"] --> glb
+  glb -->|"editors near India"| apiIn["Board API copy · India region"]
+  glb -->|"editors near Europe"| apiEu["Board API copy · Europe region"]
+  glb -->|"editors near Oregon"| api["Board API copy · Oregon region"]
+  glb -.->|"region lost: its editors go to the next nearest copy, no steps to run"| apiEu
+  apiIn -->|"strokes"| dbIn[("Board DB copy · India")]
+  apiEu -->|"strokes"| dbEu[("Board DB copy · Europe")]
+  api -->|"strokes"| db[("Board DB copy · Oregon")]
+  dbIn <-.->|"replicate strokes both ways"| dbEu
+  dbEu <-.->|"replicate strokes both ways"| db
+  db <-.->|"replicate strokes both ways"| dbIn
+  api --> assets[("Image and file store · copied to every region")]
+  runbook["Region failover runbook"] -.-> api
+  apiIn --> assets
+  apiEu --> assets
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class glb,apiIn,apiEu,api,dbIn,dbEu,db,assets added;
+  classDef removed stroke:#dc2626,stroke-width:3px,stroke-dasharray:4 4;
+  class runbook removed;
+  linkStyle 0 stroke:#16a34a,stroke-width:3px;
+  linkStyle 1 stroke:#16a34a,stroke-width:3px;
+  linkStyle 2 stroke:#16a34a,stroke-width:3px;
+  linkStyle 3 stroke:#16a34a,stroke-width:3px;
+  linkStyle 4 stroke:#16a34a,stroke-width:3px;
+  linkStyle 5 stroke:#16a34a,stroke-width:3px;
+  linkStyle 6 stroke:#16a34a,stroke-width:3px;
+  linkStyle 7 stroke:#16a34a,stroke-width:3px;
+  linkStyle 8 stroke:#16a34a,stroke-width:3px;
+  linkStyle 9 stroke:#16a34a,stroke-width:3px;
+  linkStyle 10 stroke:#16a34a,stroke-width:3px;
+  linkStyle 11 stroke:#16a34a,stroke-width:3px;
+  linkStyle 12 stroke:#16a34a,stroke-width:3px;
+  linkStyle 14 stroke:#dc2626,stroke-width:3px;
+  linkStyle 15 stroke:#16a34a,stroke-width:3px;
+  linkStyle 16 stroke:#16a34a,stroke-width:3px;`,
+
+  "geodes-4": `flowchart TD
+  cars["Vehicles in 40 countries · 20,000 telemetry messages/s"] --> glb["Global load balancer · nearest region, skips a region that is down"]
+  app["Driver mobile app"] --> glb
+  glb -->|"vehicles and drivers near Europe"| stEu["Ingest and app API copy · Europe region"]
+  glb -->|"vehicles near Ohio"| ingest["Telemetry ingest copy · Ohio"]
+  glb -->|"drivers near Ohio"| appapi["Driver app API copy · Ohio"]
+  glb -->|"vehicles and drivers near Asia"| stAs["Ingest and app API copy · Asia region"]
+  glb -.->|"if Ohio is down, its vehicles go to the other regions"| stEu
+  stEu -->|"writes vehicle state"| dbEu[("Vehicle state copy · Europe")]
+  stAs -->|"writes vehicle state"| dbAs[("Vehicle state copy · Asia")]
+  ingest -->|"writes vehicle state"| db[("Vehicle state copy · Ohio")]
+  appapi -->|"writes vehicle state"| db
+  dbEu <-.->|"replicate writes both ways"| db
+  db <-.->|"replicate writes both ways"| dbAs
+  dbAs <-.->|"replicate writes both ways"| dbEu
+  ingest --> lake[("Telemetry archive")]
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class glb,stEu,ingest,appapi,stAs,dbEu,dbAs,db added;
+  linkStyle 0 stroke:#16a34a,stroke-width:3px;
+  linkStyle 1 stroke:#16a34a,stroke-width:3px;
+  linkStyle 2 stroke:#16a34a,stroke-width:3px;
+  linkStyle 3 stroke:#16a34a,stroke-width:3px;
+  linkStyle 4 stroke:#16a34a,stroke-width:3px;
+  linkStyle 5 stroke:#16a34a,stroke-width:3px;
+  linkStyle 6 stroke:#16a34a,stroke-width:3px;
+  linkStyle 7 stroke:#16a34a,stroke-width:3px;
+  linkStyle 8 stroke:#16a34a,stroke-width:3px;
+  linkStyle 11 stroke:#16a34a,stroke-width:3px;
+  linkStyle 12 stroke:#16a34a,stroke-width:3px;
+  linkStyle 13 stroke:#16a34a,stroke-width:3px;`,
+
+  "geodes-5": `flowchart TD
+  asia["Asian exchanges · bid discarded after 100 ms"] --> lb["Global load balancer · sends each exchange to the nearest bidder"]
+  usx["US exchanges · bid discarded after 100 ms"] --> lb
+  lb -->|"US exchanges near the east"| east["Bidder copy · US East"]
+  lb -->|"US exchanges near the west"| west["Bidder copy · US West"]
+  lb -->|"Asian exchanges"| asiaB["Bidder copy · Asia region · answers inside 100 ms"]
+  lb -.->|"if a region is down, its exchanges go to the next nearest copy"| west
+  east -->|"read and update budget counter"| budget[("Budget counter copy · US East")]
+  west -->|"read and update budget counter"| budgetW[("Budget counter copy · US West")]
+  asiaB -->|"read and update budget counter"| budgetAs[("Budget counter copy · Asia")]
+  budget <-.->|"replicate counter updates both ways"| budgetW
+  budgetW <-.->|"replicate counter updates both ways"| budgetAs
+  budgetAs <-.->|"replicate counter updates both ways"| budget
+  east --> models[("Bid model store · a copy in every region")]
+  west --> models
+  asiaB --> models
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class lb,east,west,asiaB,budget,budgetW,budgetAs,models added;
+  linkStyle 2 stroke:#16a34a,stroke-width:3px;
+  linkStyle 3 stroke:#16a34a,stroke-width:3px;
+  linkStyle 4 stroke:#16a34a,stroke-width:3px;
+  linkStyle 5 stroke:#16a34a,stroke-width:3px;
+  linkStyle 6 stroke:#16a34a,stroke-width:3px;
+  linkStyle 7 stroke:#16a34a,stroke-width:3px;
+  linkStyle 8 stroke:#16a34a,stroke-width:3px;
+  linkStyle 9 stroke:#16a34a,stroke-width:3px;
+  linkStyle 10 stroke:#16a34a,stroke-width:3px;
+  linkStyle 11 stroke:#16a34a,stroke-width:3px;
+  linkStyle 13 stroke:#16a34a,stroke-width:3px;
+  linkStyle 14 stroke:#16a34a,stroke-width:3px;`,
+
+  "sidecar-1": `flowchart TD
+  gw["API gateway"] --> java["Java services · plain HTTP calls"]
+  gw --> go["Go services · plain HTTP calls"]
+  gw --> py["Python services · plain HTTP calls"]
+  gw --> nodejs["Node services · plain HTTP calls"]
+  java -.->|"imports"| libj["Java certificate library"]
+  go -.->|"imports"| libg["Go certificate library"]
+  java -->|"HTTP to localhost"| sc1["Proxy sidecar · same image · one next to each Java instance"]
+  go -->|"HTTP to localhost"| sc2["Proxy sidecar · same image · one next to each Go instance"]
+  py -->|"HTTP to localhost"| sc3["Proxy sidecar · same image · one next to each Python instance"]
+  nodejs -->|"HTTP to localhost"| sc4["Proxy sidecar · same image · one next to each Node instance"]
+  sc1 -->|"mutual TLS · one retry and timeout policy"| ledger["Ledger service · its own proxy sidecar checks mutual TLS"]
+  sc2 -->|"mutual TLS · one retry and timeout policy"| fraud["Fraud scoring service · its own proxy sidecar checks mutual TLS"]
+  sc3 -->|"mutual TLS"| ledger
+  sc4 -->|"mutual TLS"| fraud
+  ca["Certificate authority · rotates every 24 h"] -.->|"new certificate every 24 h · format change means one sidecar image to update"| sc1
+  ca -.-> sc2
+  ca -.-> sc3
+  ca -.-> sc4
+  ledger --> db[("Payments DB")]
+  fraud --> db
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class java,go,py,nodejs,sc1,sc2,sc3,sc4,ledger,fraud added;
+  classDef removed stroke:#dc2626,stroke-width:3px,stroke-dasharray:4 4;
+  class libj,libg removed;
+  linkStyle 6 stroke:#16a34a,stroke-width:3px;
+  linkStyle 7 stroke:#16a34a,stroke-width:3px;
+  linkStyle 8 stroke:#16a34a,stroke-width:3px;
+  linkStyle 9 stroke:#16a34a,stroke-width:3px;
+  linkStyle 10 stroke:#16a34a,stroke-width:3px;
+  linkStyle 11 stroke:#16a34a,stroke-width:3px;
+  linkStyle 12 stroke:#16a34a,stroke-width:3px;
+  linkStyle 13 stroke:#16a34a,stroke-width:3px;
+  linkStyle 14 stroke:#16a34a,stroke-width:3px;
+  linkStyle 15 stroke:#16a34a,stroke-width:3px;
+  linkStyle 16 stroke:#16a34a,stroke-width:3px;
+  linkStyle 17 stroke:#16a34a,stroke-width:3px;
+  linkStyle 4 stroke:#dc2626,stroke-width:3px;
+  linkStyle 5 stroke:#dc2626,stroke-width:3px;`,
+
+  "sidecar-2": `flowchart TD
+  subgraph host["Same host as the vendor program"]
+    vendor["Vendor C++ reader · unchanged · new binary drops in without touching the sidecars"]
+    logdir[("Local log directory")]
+    proxy["TLS proxy sidecar"]
+    shipper["Log shipper sidecar"]
+  end
+  scanner["CT and MRI scanners"] -->|"scan output"| vendor
+  vendor -->|"writes logs"| logdir
+  vendor -->|"plain HTTP to localhost"| proxy
+  proxy -->|"HTTPS with hospital certificates"| pacs["Imaging archive"]
+  ca["Hospital certificate authority · rotates weekly"] -.->|"new certificate each week"| proxy
+  shipper -->|"reads new log lines"| logdir
+  shipper -->|"ships lines within 60 s"| audit[("Central audit store")]
+  pacs --> viewer["Radiologist viewer"]
+  vendor -.->|"plain HTTP over the network"| pacs
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class proxy,shipper added;
+  linkStyle 2 stroke:#16a34a,stroke-width:3px;
+  linkStyle 3 stroke:#16a34a,stroke-width:3px;
+  linkStyle 4 stroke:#16a34a,stroke-width:3px;
+  linkStyle 5 stroke:#16a34a,stroke-width:3px;
+  linkStyle 6 stroke:#16a34a,stroke-width:3px;
+  linkStyle 8 stroke:#dc2626,stroke-width:3px;`,
+
+  "sidecar-3": `flowchart TD
+  players["Players"] --> match["Match servers · C# · reads config from localhost"]
+  players --> mm["Matchmaking · Elixir · reads config from localhost"]
+  players --> chat["Chat · Rust · reads config from localhost"]
+  match -->|"GET localhost config"| sc1["Config sidecar · next to each match server"]
+  mm -->|"GET localhost config"| sc2["Config sidecar · next to each matchmaking instance"]
+  chat -->|"GET localhost config"| sc3["Config sidecar · next to each chat instance"]
+  sc1 -->|"polls · one cache and retry rule · changes within 30 s"| store[("Central config store · XP multipliers, region routing")]
+  sc2 -->|"polls · same sidecar build"| store
+  sc3 -->|"polls · same sidecar build"| store
+  mm --> match
+  designers["Game designers"] -->|"change tuning values"| store
+  match -.->|"C# polling client"| store
+  mm -.->|"Elixir polling client"| store
+  chat -.->|"Rust polling client"| store
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class match,mm,chat,sc1,sc2,sc3 added;
+  linkStyle 3 stroke:#16a34a,stroke-width:3px;
+  linkStyle 4 stroke:#16a34a,stroke-width:3px;
+  linkStyle 5 stroke:#16a34a,stroke-width:3px;
+  linkStyle 6 stroke:#16a34a,stroke-width:3px;
+  linkStyle 7 stroke:#16a34a,stroke-width:3px;
+  linkStyle 8 stroke:#16a34a,stroke-width:3px;
+  linkStyle 11 stroke:#dc2626,stroke-width:3px;
+  linkStyle 12 stroke:#dc2626,stroke-width:3px;
+  linkStyle 13 stroke:#dc2626,stroke-width:3px;`,
+
+  "sidecar-4": `flowchart TD
+  subgraph inst["Each ingest instance · adapter scales and retires with it"]
+    ingest["Rust ingest service · unchanged · 40,000 msgs/s"]
+    adapter["MQTT adapter sidecar · Go · released by the hardware team · decodes binary payload into the ingest service's POST format"]
+  end
+  oldfleet["Existing trucks"] -->|"HTTP POST"| lb["Load balancer"]
+  lb --> ingest
+  ingest --> stream[["Telemetry stream"]]
+  stream --> tsdb[("Time series DB")]
+  newhw["Acquired hardware line"] -->|"MQTT over TLS · binary payload"| adapter
+  adapter -->|"plain HTTP POST to localhost · translated payload"| ingest
+  newhw -.->|"MQTT straight to ingest"| ingest
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class adapter added;
+  linkStyle 4 stroke:#16a34a,stroke-width:3px;
+  linkStyle 5 stroke:#16a34a,stroke-width:3px;
+  linkStyle 6 stroke:#dc2626,stroke-width:3px;`,
+
+  "sidecar-5": `flowchart TD
+  subgraph jp["Java bidder host"]
+    javab["Java bidder · no log library in its heap"]
+    libj["Java log library"]
+    scj["Log sidecar container · own memory limit · a buffering bug cannot kill the bidder"]
+  end
+  subgraph gp["Go bidder host"]
+    gob["Go bidder · no log library in its heap"]
+    libg["Go log library"]
+    scg["Log sidecar container · same build as on Java hosts"]
+  end
+  exch["Ad exchange auctions"] --> javab
+  exch --> gob
+  javab -.->|"function call per log line"| libj
+  gob -.->|"function call per log line"| libg
+  javab -->|"writes plain log lines to shared file path"| scj
+  gob -->|"writes plain log lines to shared file path"| scg
+  scj -->|"adds geo and advertiser fields, ships"| logs[("Log pipeline")]
+  scg -->|"adds geo and advertiser fields, ships"| logs
+  geo[("Geo and advertiser lookup data")] --> scj
+  geo --> scg
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class javab,gob,scj,scg added;
+  classDef removed stroke:#dc2626,stroke-width:3px,stroke-dasharray:4 4;
+  class libj,libg removed;
+  linkStyle 4 stroke:#16a34a,stroke-width:3px;
+  linkStyle 5 stroke:#16a34a,stroke-width:3px;
+  linkStyle 6 stroke:#16a34a,stroke-width:3px;
+  linkStyle 7 stroke:#16a34a,stroke-width:3px;
+  linkStyle 8 stroke:#16a34a,stroke-width:3px;
+  linkStyle 9 stroke:#16a34a,stroke-width:3px;
+  linkStyle 2 stroke:#dc2626,stroke-width:3px;
+  linkStyle 3 stroke:#dc2626,stroke-width:3px;`,
+
+  "service-discovery-1": `flowchart TD
+  orders["Parcel order intake"] --> dispatch["Dispatch service · no address file"]
+  solvers["Route solvers · 8 to 60 copies · new private IP each start"] -->|"POST own IP and port on start · DELETE on shutdown"| reg["Service registry · fixed address · name, instance ID, IP, port"]
+  reg -->|"calls health check URL on a timer · drops rows that stop answering"| solvers
+  dispatch -->|"asks for route-solver addresses"| reg
+  dispatch -->|"calls a live address from the list"| solvers
+  autoscaler["Autoscaler"] -->|"adds and removes copies"| solvers
+  solvers --> maps[("Road network data")]
+  ops["Ops engineer"] -.->|"edits file, rebuilds, redeploys"| dispatch
+  dispatch -.->|"calls IPs of stopped solvers"| gone["IPs of stopped solvers"]
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class dispatch,reg added;
+  classDef removed stroke:#dc2626,stroke-width:3px,stroke-dasharray:4 4;
+  class gone removed;
+  linkStyle 1 stroke:#16a34a,stroke-width:3px;
+  linkStyle 2 stroke:#16a34a,stroke-width:3px;
+  linkStyle 3 stroke:#16a34a,stroke-width:3px;
+  linkStyle 4 stroke:#16a34a,stroke-width:3px;
+  linkStyle 7 stroke:#dc2626,stroke-width:3px;
+  linkStyle 8 stroke:#dc2626,stroke-width:3px;`,
+
+  "service-discovery-2": `flowchart TD
+  uploads["Customer uploads"] --> scheduler["Job scheduler · no text file"]
+  workers["Encoder workers on cheap compute · about 200 start and 180 reclaimed a day"] -->|"POST host and port on start"| reg["Service registry · fixed address · host and port per worker"]
+  reg -->|"health check on a timer · reclaimed machines cannot remove their own row, so the timer drops them"| workers
+  scheduler -->|"asks for live encoder workers"| reg
+  scheduler -->|"sends job to a live worker"| workers
+  provider["Cloud provider"] -->|"reclaims machines"| workers
+  workers --> out[("Encoded video store")]
+  eng["Engineer"] -.->|"updates text file each morning"| scheduler
+  scheduler -.->|"jobs to reclaimed machines"| gone["Reclaimed machines"]
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class scheduler,reg added;
+  classDef removed stroke:#dc2626,stroke-width:3px,stroke-dasharray:4 4;
+  class gone removed;
+  linkStyle 1 stroke:#16a34a,stroke-width:3px;
+  linkStyle 2 stroke:#16a34a,stroke-width:3px;
+  linkStyle 3 stroke:#16a34a,stroke-width:3px;
+  linkStyle 4 stroke:#16a34a,stroke-width:3px;
+  linkStyle 7 stroke:#dc2626,stroke-width:3px;
+  linkStyle 8 stroke:#dc2626,stroke-width:3px;`,
+
+  "service-discovery-3": `flowchart TD
+  customers["Mobile and web banking"] --> payments["Payments API · looks up addresses at call time"]
+  acct["Account service · new address"] -->|"registers new address on restart"| reg["Service registry · fixed address · 30 services"]
+  reg -->|"health check on a timer · drops the old address"| acct
+  payments -->|"asks for account service addresses"| reg
+  payments -->|"calls the current address"| acct
+  platform["Container platform · 30 services"] -->|"restarts containers on a different machine"| acct
+  acct --> ledger[("Core ledger")]
+  sheet["Address spreadsheet"] -.->|"regenerated once per deploy"| bundle[("Config bundle of target addresses")]
+  bundle -.->|"loaded at deploy"| payments
+  payments -.->|"calls old address"| oldacct["Old account service address"]
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class payments,reg added;
+  classDef removed stroke:#dc2626,stroke-width:3px,stroke-dasharray:4 4;
+  class sheet,bundle,oldacct removed;
+  linkStyle 1 stroke:#16a34a,stroke-width:3px;
+  linkStyle 2 stroke:#16a34a,stroke-width:3px;
+  linkStyle 3 stroke:#16a34a,stroke-width:3px;
+  linkStyle 4 stroke:#16a34a,stroke-width:3px;
+  linkStyle 7 stroke:#dc2626,stroke-width:3px;
+  linkStyle 8 stroke:#dc2626,stroke-width:3px;
+  linkStyle 9 stroke:#dc2626,stroke-width:3px;`,
+
+  "service-discovery-4": `flowchart TD
+  players["Players"] -->|"find a match"| mm["Matchmaker · no port guessing"]
+  host["Match host · up to 40 match processes"] -->|"starts match · binds any free port"| match["Match process · unpredictable port"]
+  match -->|"POST host and bound port when ready for players"| reg["Service registry · host and port per open match"]
+  match -->|"DELETE its row when the match ends"| reg
+  reg -->|"health check on a timer · drops crashed matches"| match
+  mm -->|"asks for matches accepting players"| reg
+  mm -->|"sends players to a registered host and port"| match
+  match -->|"match results"| results[("Match results DB")]
+  mm -.->|"guessed port"| empty["Port with nothing listening"]
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class mm,reg added;
+  classDef removed stroke:#dc2626,stroke-width:3px,stroke-dasharray:4 4;
+  class empty removed;
+  linkStyle 2 stroke:#16a34a,stroke-width:3px;
+  linkStyle 3 stroke:#16a34a,stroke-width:3px;
+  linkStyle 4 stroke:#16a34a,stroke-width:3px;
+  linkStyle 5 stroke:#16a34a,stroke-width:3px;
+  linkStyle 6 stroke:#16a34a,stroke-width:3px;
+  linkStyle 8 stroke:#dc2626,stroke-width:3px;`,
+
+  "service-discovery-5": `flowchart TD
+  shoppers["Shoppers"] --> cart["Cart service · asks registry instead of DNS"]
+  newinv["Inventory instances · get traffic as soon as they register"] -->|"POST address on start"| reg["Service registry · lists only instances passing health checks"]
+  reg -->|"calls health check URL on a timer · drops failing instances"| newinv
+  cart -->|"asks for inventory addresses"| reg
+  checkout["Checkout service · JVM · asks registry instead of DNS"] -->|"asks for inventory addresses"| reg
+  cart -->|"calls a healthy instance"| newinv
+  checkout -->|"calls a healthy instance"| newinv
+  autoscaler["Autoscaler"] -->|"adds instances"| newinv
+  newinv --> invdb[("Inventory DB")]
+  cart -.->|"DNS lookup"| dns["Internal DNS · 60 s record lifetime"]
+  checkout -.->|"DNS lookup"| dns
+  cart -.->|"calls stale addresses"| oldinv["Old inventory addresses"]
+  checkout -.->|"calls stale addresses"| oldinv
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class cart,checkout,newinv,reg added;
+  classDef removed stroke:#dc2626,stroke-width:3px,stroke-dasharray:4 4;
+  class dns,oldinv removed;
+  linkStyle 1 stroke:#16a34a,stroke-width:3px;
+  linkStyle 2 stroke:#16a34a,stroke-width:3px;
+  linkStyle 3 stroke:#16a34a,stroke-width:3px;
+  linkStyle 4 stroke:#16a34a,stroke-width:3px;
+  linkStyle 5 stroke:#16a34a,stroke-width:3px;
+  linkStyle 6 stroke:#16a34a,stroke-width:3px;
+  linkStyle 9 stroke:#dc2626,stroke-width:3px;
+  linkStyle 10 stroke:#dc2626,stroke-width:3px;
+  linkStyle 11 stroke:#dc2626,stroke-width:3px;
+  linkStyle 12 stroke:#dc2626,stroke-width:3px;`,
+
+  "publisher-subscriber-1": `flowchart TD
+  rider["Rider app"] -->|"end trip"| trip["Trip service · returns without waiting on any consumer"]
+  trip --> tripdb[("Trip DB")]
+  trip -->|"publish TripCompleted with unique message id · broker acks right away"| topic[["Broker topic · trip-completed"]]
+  topic -->|"own subscription queue"| receipts["Receipts"]
+  topic -->|"own subscription queue"| payouts["Driver payouts"]
+  topic -->|"own subscription queue · an outage only grows this backlog"| loyalty["Loyalty points"]
+  topic -->|"own subscription queue"| fraud["Fraud team service"]
+  topic -->|"own subscription queue"| support["Support tool"]
+  topic -->|"own subscription queue"| dw["Data warehouse loader"]
+  topic -->|"own subscription queue"| ins["Insurance partner"]
+  newteam["Eighth consumer · no trip service change"] -->|"creates its own subscription"| topic
+  trip -.->|"removed from completion handler"| calls["Seven outbound HTTP calls that waited"]
+  topic -.->|"message fails too many times"| dlq[["Dead-letter queue"]]
+  driver["Driver app"] -->|"location updates"| trip
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class trip,topic,newteam,dlq added;
+  classDef removed stroke:#dc2626,stroke-width:3px,stroke-dasharray:4 4;
+  class calls removed;
+  linkStyle 2 stroke:#16a34a,stroke-width:3px;
+  linkStyle 3 stroke:#16a34a,stroke-width:3px;
+  linkStyle 4 stroke:#16a34a,stroke-width:3px;
+  linkStyle 5 stroke:#16a34a,stroke-width:3px;
+  linkStyle 6 stroke:#16a34a,stroke-width:3px;
+  linkStyle 7 stroke:#16a34a,stroke-width:3px;
+  linkStyle 8 stroke:#16a34a,stroke-width:3px;
+  linkStyle 9 stroke:#16a34a,stroke-width:3px;
+  linkStyle 10 stroke:#16a34a,stroke-width:3px;
+  linkStyle 12 stroke:#16a34a,stroke-width:3px;
+  linkStyle 11 stroke:#dc2626,stroke-width:3px;`,
+
+  "publisher-subscriber-2": `flowchart TD
+  networks["Card networks · 12 million transactions a day"] --> ledger["Core ledger · one publish call, no list of groups"]
+  ledger --> ldb[("Ledger DB")]
+  ledger -->|"publish each transaction once"| topic[["Broker topic · card-transactions"]]
+  topic -->|"filter: over 500 dollars or outside home country"| fq[["Fraud subscription queue"]]
+  fq --> fraud["Fraud group · wants over 500 dollars or outside home country"]
+  topic -->|"no filter"| sq[["Statement subscription queue"]]
+  sq --> stmt["Statement group · wants all"]
+  topic -->|"filter: merchant category 5411 or 5812"| rq[["Rewards subscription queue"]]
+  rq --> rewards["Rewards group · wants merchant categories 5411 and 5812"]
+  topic -->|"no filter · backlog kept until nightly window"| a1q[["Analytics 1 subscription queue"]]
+  a1q --> an1["Analytics group 1 · reads hours later in nightly window"]
+  topic -->|"no filter · backlog kept until nightly window"| a2q[["Analytics 2 subscription queue"]]
+  a2q --> an2["Analytics group 2 · reads hours later in nightly window"]
+  ledger -.->|"direct send call"| fq
+  topic -.->|"message fails too many times"| dlq[["Dead-letter queue"]]
+  stmt -.->|"asks ledger team for a queue and send call"| ledger
+  rewards -.->|"asks ledger team for a queue and send call"| ledger
+  an1 -.->|"asks ledger team for a queue and send call"| ledger
+  an2 -.->|"asks ledger team for a queue and send call"| ledger
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class ledger,topic,fq,sq,rq,a1q,a2q,dlq added;
+  linkStyle 2 stroke:#16a34a,stroke-width:3px;
+  linkStyle 3 stroke:#16a34a,stroke-width:3px;
+  linkStyle 5 stroke:#16a34a,stroke-width:3px;
+  linkStyle 6 stroke:#16a34a,stroke-width:3px;
+  linkStyle 7 stroke:#16a34a,stroke-width:3px;
+  linkStyle 8 stroke:#16a34a,stroke-width:3px;
+  linkStyle 9 stroke:#16a34a,stroke-width:3px;
+  linkStyle 10 stroke:#16a34a,stroke-width:3px;
+  linkStyle 11 stroke:#16a34a,stroke-width:3px;
+  linkStyle 12 stroke:#16a34a,stroke-width:3px;
+  linkStyle 14 stroke:#16a34a,stroke-width:3px;
+  linkStyle 13 stroke:#dc2626,stroke-width:3px;
+  linkStyle 15 stroke:#dc2626,stroke-width:3px;
+  linkStyle 16 stroke:#dc2626,stroke-width:3px;
+  linkStyle 17 stroke:#dc2626,stroke-width:3px;
+  linkStyle 18 stroke:#dc2626,stroke-width:3px;`,
+
+  "publisher-subscriber-3": `flowchart TD
+  creator["Creator"] -->|"upload video"| upload["Upload service · marks ready and returns in under 50 ms"]
+  upload --> store[("Video store")]
+  upload -->|"publish VideoIngested with unique id · broker acks right away"| topic[["Broker topic · video-ingested"]]
+  topic -->|"own subscription queue"| thumb["Thumbnail generation"]
+  topic -->|"own subscription queue · 500s only grow this backlog"| captions["Caption transcription"]
+  topic -->|"own subscription queue"| copyright["Copyright matching"]
+  topic -->|"own subscription queue"| search["Search indexing consumer A"]
+  topic -->|"own subscription queue"| searchB["Search indexing consumer B"]
+  topic -->|"own subscription queue"| notify["Creator notification"]
+  moderation["Moderation team · sixth reaction, no upload service change"] -->|"creates its own subscription"| topic
+  upload -.->|"removed from upload path"| chain["Five calls in sequence that waited 40 s"]
+  topic -.->|"message fails too many times"| dlq[["Dead-letter queue"]]
+  upload --> meta[("Video metadata DB")]
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class upload,topic,search,searchB,moderation,dlq added;
+  classDef removed stroke:#dc2626,stroke-width:3px,stroke-dasharray:4 4;
+  class chain removed;
+  linkStyle 2 stroke:#16a34a,stroke-width:3px;
+  linkStyle 3 stroke:#16a34a,stroke-width:3px;
+  linkStyle 4 stroke:#16a34a,stroke-width:3px;
+  linkStyle 5 stroke:#16a34a,stroke-width:3px;
+  linkStyle 6 stroke:#16a34a,stroke-width:3px;
+  linkStyle 7 stroke:#16a34a,stroke-width:3px;
+  linkStyle 8 stroke:#16a34a,stroke-width:3px;
+  linkStyle 9 stroke:#16a34a,stroke-width:3px;
+  linkStyle 11 stroke:#16a34a,stroke-width:3px;
+  linkStyle 10 stroke:#dc2626,stroke-width:3px;`,
+
+  "publisher-subscriber-4": `flowchart TD
+  meters["4 million smart meters · reading every 15 min"] --> ingest["Ingest service · writes each reading once"]
+  ingest -->|"publish reading with unique id"| q1[["Broker topic · meter-readings"]]
+  ingest -.->|"second write of the same reading"| q2[["Feature store copy queue"]]
+  q2 -.-> fs["ML feature store · other department · offline 2 h every Tuesday"]
+  q1 -->|"own subscription queue"| bq[["Billing subscription"]]
+  q1 -->|"own subscription queue"| oq[["Outage subscription"]]
+  q1 -->|"own subscription queue · holds the Tuesday 2 h backlog"| fq[["Feature store subscription"]]
+  bq --> billing["Billing"]
+  oq --> outage["Outage detection service"]
+  fq -->|"catches up after maintenance"| fs
+  billing --> bdb[("Billing DB")]
+  outage --> ops["Grid operations dashboard"]
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class ingest,q1,bq,oq,fq added;
+  classDef removed stroke:#dc2626,stroke-width:3px,stroke-dasharray:4 4;
+  class q2 removed;
+  linkStyle 1 stroke:#16a34a,stroke-width:3px;
+  linkStyle 4 stroke:#16a34a,stroke-width:3px;
+  linkStyle 5 stroke:#16a34a,stroke-width:3px;
+  linkStyle 6 stroke:#16a34a,stroke-width:3px;
+  linkStyle 7 stroke:#16a34a,stroke-width:3px;
+  linkStyle 8 stroke:#16a34a,stroke-width:3px;
+  linkStyle 9 stroke:#16a34a,stroke-width:3px;
+  linkStyle 2 stroke:#dc2626,stroke-width:3px;
+  linkStyle 3 stroke:#dc2626,stroke-width:3px;`,
+
+  "publisher-subscriber-5": `flowchart TD
+  merchants["Merchants and pricing jobs · 900 price changes per minute"] --> catalog["Catalog service · no endpoint list, write path ends at publish"]
+  catalog --> cdb[("Catalog DB · 2 million listings")]
+  catalog -->|"publish PriceChanged with unique id · broker acks right away"| topic[["Broker topic · price-changed"]]
+  topic -->|"own subscription queue"| search["Search index"]
+  topic -->|"own subscription queue"| cart["Cart recalculation job"]
+  topic -->|"own subscription queue"| history["Price history archive"]
+  topic -->|"own subscription queue · slow exporter only grows this backlog"| feedA["Partner feed exporter A"]
+  topic -->|"own subscription queue"| feedB["Partner feed exporter B"]
+  topic -->|"filter: price drop over 20 percent"| alerts["Merchandising alert tool · only cares about drops over 20 percent"]
+  seventh["Seventh system · other region, different stack"] -->|"creates its own subscription"| topic
+  catalog -.->|"removed from write path"| list["Six POSTs to a hardcoded endpoint list"]
+  topic -.->|"message fails too many times"| dlq[["Dead-letter queue"]]
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class catalog,topic,dlq,seventh added;
+  classDef removed stroke:#dc2626,stroke-width:3px,stroke-dasharray:4 4;
+  class list removed;
+  linkStyle 2 stroke:#16a34a,stroke-width:3px;
+  linkStyle 3 stroke:#16a34a,stroke-width:3px;
+  linkStyle 4 stroke:#16a34a,stroke-width:3px;
+  linkStyle 5 stroke:#16a34a,stroke-width:3px;
+  linkStyle 6 stroke:#16a34a,stroke-width:3px;
+  linkStyle 7 stroke:#16a34a,stroke-width:3px;
+  linkStyle 8 stroke:#16a34a,stroke-width:3px;
+  linkStyle 9 stroke:#16a34a,stroke-width:3px;
+  linkStyle 11 stroke:#16a34a,stroke-width:3px;
+  linkStyle 10 stroke:#dc2626,stroke-width:3px;`,
+
+  "canary-release-1": `flowchart TD
+  players["Video players · many on slow mobile networks"] -->|"fetch segments"| cdn["CDN edge"]
+  players -->|"request manifest"| lb["Load balancer · routing rule by share of sessions"]
+  lb -->|"99 percent of sessions"| oldm["Old manifest server · rebuffer rate 0.8 percent"]
+  lb -->|"1 percent of mobile sessions · raised in steps while numbers hold"| newm["Rewritten manifest server · separate servers"]
+  newm --> catalog[("Rendition catalog")]
+  oldm --> catalog
+  cdn --> origin[("Video segment origin")]
+  oldm -.->|"rebuffer rate, startup time, CPU"| metrics["Playback metrics · old and new side by side"]
+  newm -.->|"rebuffer rate, startup time, CPU"| metrics
+  metrics -.->|"numbers worse: set rule to 0 percent, takes effect in seconds"| lb
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class lb,newm,metrics added;
+  linkStyle 2 stroke:#16a34a,stroke-width:3px;
+  linkStyle 3 stroke:#16a34a,stroke-width:3px;
+  linkStyle 4 stroke:#16a34a,stroke-width:3px;
+  linkStyle 8 stroke:#16a34a,stroke-width:3px;
+  linkStyle 9 stroke:#16a34a,stroke-width:3px;`,
+
+  "canary-release-2": `flowchart TD
+  merchants["Merchant terminals"] -->|"card authorization"| gw["Authorization gateway · routing rule picks the scorer"]
+  gw -->|"98 percent of live authorizations"| oldscore["Current fraud scorer"]
+  gw -->|"2 percent of live authorizations"| newscore["New fraud scorer · separate servers, live traffic"]
+  gw -->|"approve or decline"| issuers["Card issuers"]
+  replay[("Last month's traffic replay · decline rate within 0.1 percent · no timing, retries, or issuer responses")] -.->|"offline only"| newscore
+  oldscore --> features[("Cardholder feature store")]
+  newscore --> features
+  issuers -.->|"issuer responses and retries"| gw
+  oldscore -.->|"decline rate, latency, retries"| compare["Live comparison · old and new scorer side by side"]
+  newscore -.->|"decline rate, latency, retries"| compare
+  compare -.->|"new scorer declines more good cards: rule to 0 percent at once"| gw
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class gw,newscore,compare added;
+  linkStyle 1 stroke:#16a34a,stroke-width:3px;
+  linkStyle 2 stroke:#16a34a,stroke-width:3px;
+  linkStyle 6 stroke:#16a34a,stroke-width:3px;
+  linkStyle 8 stroke:#16a34a,stroke-width:3px;
+  linkStyle 9 stroke:#16a34a,stroke-width:3px;
+  linkStyle 10 stroke:#16a34a,stroke-width:3px;`,
+
+  "canary-release-3": `flowchart TD
+  shoppers["Real shoppers"] -->|"search query"| lb["Load balancer · routing rule by share of shoppers"]
+  lb -->|"95 percent of shoppers"| oldrank["Current ranking service"]
+  lb -->|"5 percent of shoppers · each shopper stays on one version"| newrank["Rewritten ranking service · production servers"]
+  oldrank --> index[("Real search index · full catalog")]
+  newrank -->|"reads the real index"| index
+  staging["Staging · 2 percent of catalog, synthetic queries"] -.->|"tested here first"| newrank
+  oldrank -.->|"click-through rate, zero-result rate, p95 latency"| analytics["Search analytics · current and rewrite side by side"]
+  newrank -.->|"click-through rate, zero-result rate, p95 latency"| analytics
+  analytics -.->|"conversions drop: rule to 0 percent within seconds"| lb
+  shoppers -->|"clicks and orders"| checkout["Checkout service"]
+  checkout -.->|"conversions from each version"| analytics
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class lb,newrank,analytics added;
+  linkStyle 1 stroke:#16a34a,stroke-width:3px;
+  linkStyle 2 stroke:#16a34a,stroke-width:3px;
+  linkStyle 4 stroke:#16a34a,stroke-width:3px;
+  linkStyle 7 stroke:#16a34a,stroke-width:3px;
+  linkStyle 8 stroke:#16a34a,stroke-width:3px;
+  linkStyle 10 stroke:#16a34a,stroke-width:3px;`,
+
+  "canary-release-4": `flowchart TD
+  travelers["Travelers and agents · real booking traffic"] --> lb["Load balancer · routes a share to canary servers"]
+  lb -->|"traffic for 196 untouched servers"| fleet["196 application servers · current Java runtime"]
+  lb -->|"traffic for 4 canary servers · 2 days of real bookings"| canary["4 application servers · new Java runtime"]
+  fleet --> sessions[("Session store · real session sizes")]
+  fleet --> res[("Reservations DB")]
+  canary --> sessions
+  canary --> res
+  synth["Synthetic load test · never reproduced the pauses"] -.->|"new Java runtime"| testenv["Test servers"]
+  fleet -.->|"GC pause times"| monitoring["JVM monitoring · canary and untouched side by side"]
+  canary -.->|"GC pause times, past 8 h and beyond"| monitoring
+  monitoring -.->|"pauses grow: route 0 percent to canary"| lb
+  upgrade["Rollout to all 200 · only after 2 clean days, in steps"] -.-> fleet
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class lb,fleet,canary,monitoring,upgrade added;
+  linkStyle 1 stroke:#16a34a,stroke-width:3px;
+  linkStyle 2 stroke:#16a34a,stroke-width:3px;
+  linkStyle 5 stroke:#16a34a,stroke-width:3px;
+  linkStyle 6 stroke:#16a34a,stroke-width:3px;
+  linkStyle 9 stroke:#16a34a,stroke-width:3px;
+  linkStyle 10 stroke:#16a34a,stroke-width:3px;
+  linkStyle 11 stroke:#16a34a,stroke-width:3px;`,
+
+  "canary-release-5": `flowchart TD
+  internal["Insurer internal accounts"] --> gw["API gateway · routing rule by account"]
+  pilot["Clinics that agreed to test"] --> gw
+  clinics["Other clinics · 3,000 total"] --> gw
+  gw -->|"everyone not in the current step"| v1["Claims API v1 · current"]
+  gw -->|"step 1 internal accounts · step 2 agreed clinics · step 3 small share of the rest · then larger shares until everyone"| v2["Claims API v2 · separate servers"]
+  v1 --> claims[("Claims DB")]
+  v2 --> claims
+  v1 -.->|"rejection rate, p99"| metrics["API metrics · v1 and v2 compared at every step"]
+  v2 -.->|"rejection rate, p99"| metrics
+  metrics -.->|"worse: rule back to 0 percent"| gw
+  staff["Clinic staff"] -.->|"phone calls when claims are rejected"| support["Support line"]
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class gw,v2,metrics added;
+  linkStyle 3 stroke:#16a34a,stroke-width:3px;
+  linkStyle 4 stroke:#16a34a,stroke-width:3px;
+  linkStyle 6 stroke:#16a34a,stroke-width:3px;
+  linkStyle 8 stroke:#16a34a,stroke-width:3px;
+  linkStyle 9 stroke:#16a34a,stroke-width:3px;`,
+
+  "blue-green-deployment-1": `flowchart TD
+  clients["Card acquirers and bank partners · 99.99 percent availability"] -->|"authorization requests"| lb["Router · one config change picks blue or green"]
+  lb -->|"live · 100 percent of requests · flip back here to back out"| blue["Blue · 40 app servers · current version"]
+  lb -.->|"idle · 0 percent until the flip"| green["Green · 40 app servers · new version"]
+  pipeline["Deploy pipeline"] -->|"deploy new version to the idle copy only"| green
+  green -.->|"smoke tests pass, then every request moves at the same instant"| lb
+  pipeline -.->|"rolling restart on the live servers · 25 min each way"| blue
+  blue --> db[("Authorization DB")]
+  green --> db
+  blue --> risk["Risk rules service"]
+  green --> risk
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class lb,blue,green added;
+  linkStyle 1 stroke:#16a34a,stroke-width:3px;
+  linkStyle 2 stroke:#16a34a,stroke-width:3px;
+  linkStyle 3 stroke:#16a34a,stroke-width:3px;
+  linkStyle 4 stroke:#16a34a,stroke-width:3px;
+  linkStyle 7 stroke:#16a34a,stroke-width:3px;
+  linkStyle 9 stroke:#16a34a,stroke-width:3px;
+  linkStyle 5 stroke:#dc2626,stroke-width:3px;`,
+
+  "blue-green-deployment-2": `flowchart TD
+  staff["3,000 clinic staff · 10 min outage sends front desks to paper"] --> lb["Router · points at blue or green"]
+  lb -->|"live traffic · flip back here in minutes"| app["Blue · production-grade servers · current build"]
+  lb -.->|"no user traffic until tests pass"| green["Green · production-grade servers · production config · new build"]
+  pipeline["Release pipeline"] -->|"deploy the exact build to the idle copy"| green
+  tests["Full test run"] -->|"runs on green before any user reaches it · proof for compliance"| green
+  green -.->|"tests pass, router flips · no maintenance page"| lb
+  app --> db[("Scheduling DB")]
+  green --> db
+  lb -.->|"2am · 40 min maintenance page"| maint["Maintenance page"]
+  staging["Staging box · smaller than production"] -->|"test run on smaller hardware"| pipeline
+  backup[("Nightly backup")] -.->|"2 hour restore as the way back"| db
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class lb,app,green,tests added;
+  classDef removed stroke:#dc2626,stroke-width:3px,stroke-dasharray:4 4;
+  class maint,staging removed;
+  linkStyle 1 stroke:#16a34a,stroke-width:3px;
+  linkStyle 2 stroke:#16a34a,stroke-width:3px;
+  linkStyle 3 stroke:#16a34a,stroke-width:3px;
+  linkStyle 4 stroke:#16a34a,stroke-width:3px;
+  linkStyle 5 stroke:#16a34a,stroke-width:3px;
+  linkStyle 7 stroke:#16a34a,stroke-width:3px;
+  linkStyle 8 stroke:#dc2626,stroke-width:3px;
+  linkStyle 9 stroke:#dc2626,stroke-width:3px;
+  linkStyle 10 stroke:#dc2626,stroke-width:3px;`,
+
+  "blue-green-deployment-3": `flowchart TD
+  trucks["80,000 trucks · 12,000 GPS pings/s"] --> router["Router · sends all traffic to one copy"]
+  dispatch["Dispatchers"] --> router
+  router -->|"live · flip back here on a bad build, no rebuild"| ingest["Blue stack · current version"]
+  router -.->|"idle until the flip"| standby["Green stack · the former standby · gets each new release"]
+  artifacts[("Artifact store")] -->|"deploy new version to the idle copy"| standby
+  standby -.->|"tests pass, router moves every dispatcher at once"| router
+  ingest --> geo[("Position store")]
+  standby --> geo
+  artifacts -.->|"rebuild and redeploy previous version · 18 min"| ingest
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class router,standby added;
+  linkStyle 0 stroke:#16a34a,stroke-width:3px;
+  linkStyle 1 stroke:#16a34a,stroke-width:3px;
+  linkStyle 2 stroke:#16a34a,stroke-width:3px;
+  linkStyle 3 stroke:#16a34a,stroke-width:3px;
+  linkStyle 4 stroke:#16a34a,stroke-width:3px;
+  linkStyle 5 stroke:#16a34a,stroke-width:3px;
+  linkStyle 7 stroke:#16a34a,stroke-width:3px;
+  linkStyle 8 stroke:#dc2626,stroke-width:3px;`,
+
+  "blue-green-deployment-4": `flowchart TD
+  players["250,000 players · long-lived sockets that reconnect on drop"] --> router["Router · repointed in one config change"]
+  router -->|"all players · one version at a time"| blue["Blue fleet · full size · current rules"]
+  router -.->|"no players until the flip"| green["Green fleet · full size · new rules · double servers only during the release window"]
+  pipeline["Deploy pipeline"] -->|"deploy the whole new version to the idle fleet"| green
+  green -.->|"tests pass, one config change sends new connections here · blue closes its sockets and players reconnect to green · flip back in under 60 s"| router
+  blue --> lobby["Lobby and match start service"]
+  green --> lobby
+  lobby --> db[("Player profile DB")]
+  pipeline -.->|"partial deploy · 12 min rollback"| fleetA["Half the fleet · new matchmaking rules"]
+  router -.->|"half old rules, half new"| fleetB["Half the fleet · old matchmaking rules"]
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class blue,green added;
+  classDef removed stroke:#dc2626,stroke-width:3px,stroke-dasharray:4 4;
+  class fleetA,fleetB removed;
+  linkStyle 1 stroke:#16a34a,stroke-width:3px;
+  linkStyle 2 stroke:#16a34a,stroke-width:3px;
+  linkStyle 3 stroke:#16a34a,stroke-width:3px;
+  linkStyle 4 stroke:#16a34a,stroke-width:3px;
+  linkStyle 5 stroke:#16a34a,stroke-width:3px;
+  linkStyle 6 stroke:#16a34a,stroke-width:3px;
+  linkStyle 8 stroke:#dc2626,stroke-width:3px;
+  linkStyle 9 stroke:#dc2626,stroke-width:3px;`,
+
+  "blue-green-deployment-5": `flowchart TD
+  customers["Bank customers · 90 percent of monthly traffic in 3 days"] --> lb["Router · points at blue or green"]
+  lb -->|"live · flip back here right away"| servers["Blue · current version · never upgraded in place"]
+  lb -.->|"idle until the flip · exercised on every release"| standby["Green · former standby hardware · new version"]
+  pipeline["Release pipeline"] -->|"deploy to the idle copy only"| standby
+  standby -.->|"tests pass, router flips"| lb
+  migrate["Schema change · works with old and new app versions · deployed before new code"] -->|"step 1"| db[("Statement DB")]
+  servers --> db
+  standby --> db
+  servers --> docs[("Statement PDF store")]
+  standby --> docs
+  pipeline -.->|"install in place · 45 min reinstall to roll back"| servers
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class lb,servers,standby,migrate added;
+  linkStyle 1 stroke:#16a34a,stroke-width:3px;
+  linkStyle 2 stroke:#16a34a,stroke-width:3px;
+  linkStyle 3 stroke:#16a34a,stroke-width:3px;
+  linkStyle 4 stroke:#16a34a,stroke-width:3px;
+  linkStyle 5 stroke:#16a34a,stroke-width:3px;
+  linkStyle 7 stroke:#16a34a,stroke-width:3px;
+  linkStyle 9 stroke:#16a34a,stroke-width:3px;
+  linkStyle 10 stroke:#dc2626,stroke-width:3px;`,
+
+  "feature-toggles-1": `flowchart TD
+  devs["Developers"] -->|"20 deploys a day · half-finished bidding code included"| trunk["Shared branch"]
+  trunk --> pipeline["Build and deploy pipeline"]
+  pipeline --> adserver["Ad servers · ship old and new bidding code"]
+  exchange["Ad exchange"] -->|"bid requests · 8 ms latency budget"| adserver
+  adserver -->|"reads flag new-bidding every few seconds"| flags[("Flag store · change with no build, deploy, or restart")]
+  adserver --> gate{"new-bidding on?"}
+  gate -->|"yes"| newbid["New bidding algorithm"]
+  gate -->|"no · the default"| oldbid["Current bidding algorithm"]
+  adserver --> metrics["Bid latency metrics"]
+  metrics -.->|"latency above 8 ms"| alert["Latency alert · no person in the loop"]
+  alert -.->|"flips flag off automatically · takes effect in seconds"| flags
+  devs -.->|"6 week side branch · 400 conflicting files"| branch["Side branch"]
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class adserver,flags,gate,newbid,oldbid,alert added;
+  classDef removed stroke:#dc2626,stroke-width:3px,stroke-dasharray:4 4;
+  class branch removed;
+  linkStyle 0 stroke:#16a34a,stroke-width:3px;
+  linkStyle 4 stroke:#16a34a,stroke-width:3px;
+  linkStyle 5 stroke:#16a34a,stroke-width:3px;
+  linkStyle 6 stroke:#16a34a,stroke-width:3px;
+  linkStyle 7 stroke:#16a34a,stroke-width:3px;
+  linkStyle 9 stroke:#16a34a,stroke-width:3px;
+  linkStyle 10 stroke:#16a34a,stroke-width:3px;
+  linkStyle 11 stroke:#dc2626,stroke-width:3px;`,
+
+  "feature-toggles-2": `flowchart TD
+  viewers["Viewers"] --> lb["Load balancer"]
+  lb --> home["Home page service · checks a flag before building the row"]
+  home -->|"reads flag recs-row"| flags[("Flag store")]
+  home --> gate{"recs-row on?"}
+  gate -->|"yes · about 120 ms"| recs["Recommendation service · ML model"]
+  gate -->|"no · during load spikes"| popular[("Popularity list · no ML call")]
+  home --> catalog[("Catalog DB")]
+  oncall["3am operator"] -->|"flip off in under 30 s · flip back on after the spike"| flags
+  home -.->|"called on every page load, no way to skip"| recs
+  oncall -.->|"wake a developer and ship a build"| devs["Developers"]
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class home,flags,gate,popular added;
+  linkStyle 1 stroke:#16a34a,stroke-width:3px;
+  linkStyle 2 stroke:#16a34a,stroke-width:3px;
+  linkStyle 3 stroke:#16a34a,stroke-width:3px;
+  linkStyle 4 stroke:#16a34a,stroke-width:3px;
+  linkStyle 5 stroke:#16a34a,stroke-width:3px;
+  linkStyle 7 stroke:#16a34a,stroke-width:3px;
+  linkStyle 8 stroke:#dc2626,stroke-width:3px;
+  linkStyle 9 stroke:#dc2626,stroke-width:3px;`,
+
+  "feature-toggles-3": `flowchart TD
+  users["40,000 business customers"] --> lb["Load balancer"]
+  testers["30 internal test users"] --> lb
+  lb --> app["Banking web app · old and new approval screens both deployed"]
+  app --> db[("Payments DB")]
+  app -->|"new-approvals on for this user?"| decide["Decision object · answers true or false per user"]
+  decide -->|"reads rules"| flags[("Flag store · on for internal test group · on for everyone at 9am on the 14th")]
+  app -->|"true for the 30 test users"| newscreen["New payments approval screen"]
+  app -->|"false for the other 40,000 until 9am on the 14th"| oldscreen["Old approval screen"]
+  legal["Legal · customer agreement update on the 14th"] -.->|"approves the go-live time"| flags
+  cab["Change advisory approval"] --> pipeline["Deploy pipeline · 50 min"]
+  pipeline -.->|"new deploy just to go live"| app
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class app,decide,flags,newscreen,oldscreen added;
+  linkStyle 4 stroke:#16a34a,stroke-width:3px;
+  linkStyle 5 stroke:#16a34a,stroke-width:3px;
+  linkStyle 6 stroke:#16a34a,stroke-width:3px;
+  linkStyle 7 stroke:#16a34a,stroke-width:3px;
+  linkStyle 8 stroke:#16a34a,stroke-width:3px;
+  linkStyle 10 stroke:#dc2626,stroke-width:3px;`,
+
+  "feature-toggles-4": `flowchart TD
+  job["Nightly firmware update job · old and new scheduling code both in the binary"] -->|"push firmware updates"| meters["2 million smart meters"]
+  job --> gate{"hash of meter id falls in the new-version share?"}
+  gate -->|"yes · same meter always gets the same answer"| newsched["New scheduling logic"]
+  gate -->|"no"| sched["Old scheduling logic"]
+  gate -->|"reads the split while running"| flags[("Flag store · split 50/50, later 90/10")]
+  newsched --> fw[("Firmware image store")]
+  sched --> fw
+  job --> errors["Error rate per version"]
+  errors -.-> ops["Operator"]
+  ops -->|"change the split while the service runs · no deploy"| flags
+  pipeline["Deploy pipeline · 35 min per deploy"] -.->|"new build to change the split"| job
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class gate,newsched,flags,errors,ops added;
+  linkStyle 1 stroke:#16a34a,stroke-width:3px;
+  linkStyle 2 stroke:#16a34a,stroke-width:3px;
+  linkStyle 3 stroke:#16a34a,stroke-width:3px;
+  linkStyle 4 stroke:#16a34a,stroke-width:3px;
+  linkStyle 5 stroke:#16a34a,stroke-width:3px;
+  linkStyle 8 stroke:#16a34a,stroke-width:3px;
+  linkStyle 9 stroke:#16a34a,stroke-width:3px;
+  linkStyle 10 stroke:#dc2626,stroke-width:3px;`,
+
+  "feature-toggles-5": `flowchart TD
+  users["Warehouse app users"] --> app["Warehouse app"]
+  app --> check{"route-report flag on for this account?"}
+  check -->|"yes"| report["Premium route-optimization report"]
+  check -->|"no"| standard["Standard reports"]
+  check -->|"reads rules per account"| flags[("Flag store · on for enterprise plan accounts · staff accounts get new versions first")]
+  sales["Sales · about 2 new enterprise customers a week"] -->|"adds an account, no release"| admin["Flag admin screen"]
+  admin --> flags
+  app --> db[("Warehouse DB")]
+  cleanup["Cleanup task · delete the flag and the check once every plan gets the report"] -.-> check
+  sales -.->|"code change and release per customer"| devs["Developers"]
+
+  classDef added stroke:#16a34a,stroke-width:3px;
+  class check,flags,admin,cleanup added;
+  linkStyle 1 stroke:#16a34a,stroke-width:3px;
+  linkStyle 4 stroke:#16a34a,stroke-width:3px;
+  linkStyle 5 stroke:#16a34a,stroke-width:3px;
+  linkStyle 6 stroke:#16a34a,stroke-width:3px;
+  linkStyle 8 stroke:#16a34a,stroke-width:3px;
+  linkStyle 9 stroke:#dc2626,stroke-width:3px;`,
 
 };
